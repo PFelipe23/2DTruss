@@ -1,37 +1,101 @@
-# Python
+# 2DTruss - arquivos locais e gerados; preservar fontes, modelos-exemplo e benchmarks.
+# Nao excluir globalmente .dxf, .dwg, .ftl, .pos, .obj, .csv ou .json:
+# esses formatos podem conter fixtures estruturais auditaveis.
+
+# Python: bytecode, ambientes e pacotes locais
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+ENV/
+__pypackages__/
+.python-version
+pip-wheel-metadata/
+
+# Testes, analise estatica e cobertura
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pyright/
+.hypothesis/
+.tox/
+.nox/
+.cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
-.venv/
-venv/
+test-results/
+junit.xml
 
-# Ferramentas desktop / build
-build/
-dist/
-*.spec
+# Build, distribuicao e empacotamento desktop
+/build/
+/dist/
+/wheelhouse/
+*.exe
+*.msi
+*.app/
+*.dmg
+*.whl
+*.pyz
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.bundle
+
+# Arquivos criados pelo aplicativo - fora de exemplos versionados
+/output/
+/outputs/
+/exports/
+/reports/
+/temp/
+/tmp/
+/scratch/
+/local/
+/workspace/
+/docs/generated/
+/verification/generated/
+/verification/ui_v09*/
+/verification/ui_v091/
+/verification/ui_v09_modular/
+
+# Arquivos temporarios, logs e recuperacao
 *.log
 *.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.swp
+*.swo
+*~
 
-# Editor / máquina local
+# Configuracoes da maquina e IDE
 .vscode/
 .idea/
+*.code-workspace
 .DS_Store
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Credenciais e configuracoes locais (nao publicar segredos)
 .env
 .env.*
 !.env.example
+!.env.sample
+*.pem
+*.p12
+*.pfx
+*.secret
+secrets.json
+credentials.json
 
-# Resultados gerados durante os testes (fixtures estáticas são versionadas)
-verification/ui_v09*/
-verification/ui_v091/
-verification/ui_v09_modular/
-
-# Distribuições compiladas, temporários e capturas locais
-*.zip
-*.bundle
-__pypackages__/
+# OBS: arquivos ja rastreados permanecem rastreados mesmo se forem ignorados.
+# Para removê-los do indice sem exclui-los do disco: git rm --cached <arquivo>.

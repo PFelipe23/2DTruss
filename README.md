@@ -46,4 +46,4 @@ A identificação pública é **2DTruss v0.1**, com uma casa decimal. Tag Git: `
 
 ## Licença e direitos
 
-A licença ainda não foi definida. O repositório deverá permanecer **privado** até revisão de licenciamento, catálogos e eventuais dados de terceiros. Não incluir normas ABNT nem cópias da apostila do Olídio.
+A licença ainda não foi definida. **MIT é a recomendação, mas não foi concedida formalmente.** O repositório deverá permanecer **privado** até a decisão do titular e revisão de catálogos, bibliotecas e eventuais materiais de terceiros. Consulte [`docs/LICENCIAMENTO.md`](docs/LICENCIAMENTO.md). Não incluir normas ABNT nem cópias da apostila do Olídio.
