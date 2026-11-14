@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Ferramentas desktop / build
+build/
+dist/
+*.spec
+*.log
+*.tmp
+
+# Editor / máquina local
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+
+# Resultados gerados durante os testes (fixtures estáticas são versionadas)
+verification/ui_v09*/
+verification/ui_v091/
+verification/ui_v09_modular/
+
+# Distribuições compiladas, temporários e capturas locais
+*.zip
+*.bundle
+__pypackages__/

@@ -1,0 +1,25 @@
+perfil;familia;A_cm2;Ix_cm4;Iy_cm4;xg_cm;massa_kg_m;bw_mm;bf_mm;t_mm;origem;rmin_cm;qualidade
+U 100x50x2,65;U (dobrado);5,07;79,42;12,57;1,37;3,98;100;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+U 100x50x3,00;U (dobrado);5,70;88,60;14,05;1,39;4,48;100;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+U 100x50x3,75;U (dobrado);7,04;107,26;17,09;1,42;5,52;100;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+U 150x50x2,65;U (dobrado);6,39;206,17;14,18;1,12;5,02;150;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+U 150x50x3,00;U (dobrado);7,20;230,76;15,87;1,13;5,66;150;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+U 150x50x3,75;U (dobrado);8,91;281,45;19,35;1,16;7,00;150;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+Ue 150x60x20x3,00;UE (dobrado);8,71;298,00;41,90;1,92;6,84;150;60;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
+L laminada 40x40x3;L (laminado);2.31000;3.58000;3.58000;1.10000;1.87000;40.00;40.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau
+L laminada 40x40x4;L (laminado);3.08000;4.47000;4.47000;1.15000;2.42000;40.00;40.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau
+L laminada 50x50x3;L (laminado);2.91000;7.15000;7.15000;1.35000;2.36000;50.00;50.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau
+L laminada 50x50x4;L (laminado);3.84000;9.26000;9.26000;1.40000;3.09000;50.00;50.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau
+L laminada 60x60x4;L (laminado);4.64000;16.31000;16.31000;1.65000;3.64000;60.00;60.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.19;Catálogo Gerdau
+L laminada 75x75x5;L (laminado);7.27000;38.70000;38.70000;2.02000;5.71000;75.00;75.00;5.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.48;Catálogo Gerdau
+L laminada 100x100x6;L (laminado);11.64000;114.40000;114.40000;2.72000;9.14000;100.00;100.00;6.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.99;Catálogo Gerdau
+U lam. 3pol x 6,10;U (laminado);7.78000;68.90000;8.20000;1.11000;6.10000;76.20;35.81;4.32;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
+U lam. 3pol x 7,44;U (laminado);9.48000;77.20000;10.30000;1.11000;7.44000;76.20;35.05;6.55;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
+U lam. 4pol x 8,04;U (laminado);10.10000;159.50000;13.10000;1.16000;8.04000;101.60;40.23;4.67;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
+L dobrada 40x40x2;L (dobrado);1.56000;2.47617;2.47617;1.07436;1.22460;40.00;40.00;2.00;Geometria retangular idealizada sem raio de dobra;0.7986963408197898;Calculado: NÃO é dado normativo
+L dobrada 40x40x3;L (dobrado);2.31000;3.58182;3.58182;1.11104;1.81335;40.00;40.00;3.00;Geometria retangular idealizada sem raio de dobra;0.7918174646956045;Calculado: NÃO é dado normativo
+L dobrada 50x50x2,65;L (dobrado);2.57978;6.38003;6.38003;1.34847;2.02512;50.00;50.00;2.65;Geometria retangular idealizada sem raio de dobra;0.9972478737820973;Calculado: NÃO é dado normativo
+L dobrada 50x50x3;L (dobrado);2.91000;7.14935;7.14935;1.36134;2.28435;50.00;50.00;3.00;Geometria retangular idealizada sem raio de dobra;0.9947243218215199;Calculado: NÃO é dado normativo
+L dobrada 60x60x3;L (dobrado);3.51000;12.53563;12.53563;1.61154;2.75535;60.00;60.00;3.00;Geometria retangular idealizada sem raio de dobra;1.1980445112296847;Calculado: NÃO é dado normativo
+L dobrada 75x75x3;L (dobrado);4.41000;24.84552;24.84552;1.98673;3.46185;75.00;75.00;3.00;Geometria retangular idealizada sem raio de dobra;1.503433180627951;Calculado: NÃO é dado normativo
+L dobrada 100x100x3;L (dobrado);5.91000;59.76826;59.76826;2.61193;4.63935;100.00;100.00;3.00;Geometria retangular idealizada sem raio de dobra;2.0129526855924698;Calculado: NÃO é dado normativo

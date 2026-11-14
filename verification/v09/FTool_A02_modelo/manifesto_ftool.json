@@ -1,0 +1,16 @@
+{
+  "schema": "poe-ftool-manifest/v1",
+  "reference_case": "F10",
+  "sha256_model_and_loads": "709dc9df907ec231b8121a932d57c437440afa4e42b0d183fdf01be85ecc4d37",
+  "units": {
+    "coordinates": "m",
+    "force": "kN",
+    "solver": "N-mm-MPa",
+    "kgf_nominal_n": 10
+  },
+  "nodes": 3,
+  "members": 3,
+  "ftool_native_model_generated": false,
+  "external_ftool_result_status": "PENDENTE",
+  "notice": "CSV para construção manual do modelo; NÃO é arquivo .ftl nativo nem resultado FTool."
+}

@@ -1,0 +1,5 @@
+﻿combo_id;case_id;factor;origin;source;node;fx_n;fy_n;moment_origin_nmm;member_id;kind;input_value;input_force_unit;basis;direction;reference_length_mm;frame_spacing_mm
+;G35;;surface;M002;T00;0.0;-2198.4375;-0.0;M002;surface;35.0;kgf;projected;down;1675.0;7500.0
+;G35;;surface;M002;T01;0.0;-2198.4375;-3682382.8125;M002;surface;35.0;kgf;projected;down;1675.0;7500.0
+;G35;;surface;M004;T01;0.0;-2198.4375;-3682382.8125;M004;surface;35.0;kgf;projected;down;1675.0;7500.0
+;G35;;surface;M004;T02;0.0;-2198.4375;-7364765.625;M004;surface;35.0;kgf;projected;down;1675.0;7500.0

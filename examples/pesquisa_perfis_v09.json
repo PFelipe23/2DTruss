@@ -1,0 +1,20 @@
+{
+  "service_case": "S_GRAV",
+  "flecha_rel": 250,
+  "profiles": {
+    "superior": [
+      "Ue 150x60x20x3,00",
+      "Ue 200x75x20x3,00"
+    ],
+    "inferior": [
+      "Ue 150x60x20x3,00"
+    ],
+    "montante": [
+      "U 100x50x2,65"
+    ],
+    "diagonal": [
+      "L laminada 60x60x4"
+    ]
+  },
+  "max_candidates": 40
+}

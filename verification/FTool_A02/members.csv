@@ -1,0 +1,4 @@
+﻿member;node_i;node_j;area_cm2;length_m;N_kN_POE
+AB;A;B;10.0;4.0;6.66666667
+AC;A;C;10.0;2.5;-8.33333333
+BC;B;C;10.0;2.5;-8.33333333

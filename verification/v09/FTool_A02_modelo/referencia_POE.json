@@ -1,0 +1,450 @@
+{
+  "schema": "poe-truss-result/v1",
+  "engine": "Python stdlib",
+  "model": {
+    "nodes": [
+      {
+        "id": "A",
+        "x_mm": 0.0,
+        "y_mm": 0.0
+      },
+      {
+        "id": "B",
+        "x_mm": 4000.0,
+        "y_mm": 0.0
+      },
+      {
+        "id": "C",
+        "x_mm": 2000.0,
+        "y_mm": 1500.0
+      }
+    ],
+    "members": [
+      {
+        "id": "AB",
+        "i": "A",
+        "j": "B",
+        "group": "inferior",
+        "profile": "AREA_EXPLICITA",
+        "area_mm2": 1000.0,
+        "mass_kg_m": 0.0,
+        "length_mm": 4000.0
+      },
+      {
+        "id": "AC",
+        "i": "A",
+        "j": "C",
+        "group": "diagonal",
+        "profile": "AREA_EXPLICITA",
+        "area_mm2": 1000.0,
+        "mass_kg_m": 0.0,
+        "length_mm": 2500.0
+      },
+      {
+        "id": "BC",
+        "i": "B",
+        "j": "C",
+        "group": "diagonal",
+        "profile": "AREA_EXPLICITA",
+        "area_mm2": 1000.0,
+        "mass_kg_m": 0.0,
+        "length_mm": 2500.0
+      }
+    ],
+    "supports": [
+      {
+        "node": "A",
+        "ux": true,
+        "uy": true
+      },
+      {
+        "node": "B",
+        "ux": false,
+        "uy": true
+      }
+    ],
+    "span_mm": 4000.0,
+    "frame_spacing_mm": 1000.0,
+    "roof_shape": "explicit",
+    "truss_type": "explicit",
+    "panels": 0,
+    "mass_kg": 0.0
+  },
+  "load_cases": [
+    {
+      "id": "F10",
+      "name": "F10 kN vertical descendente em C",
+      "kind": "nodal"
+    }
+  ],
+  "combinations": [],
+  "analyses": {
+    "F10": {
+      "nodal_displacements": {
+        "A": {
+          "ux_mm": 0.0,
+          "uy_mm": 0.0
+        },
+        "B": {
+          "ux_mm": 0.1333333333333333,
+          "uy_mm": 0.0
+        },
+        "C": {
+          "ux_mm": 0.06666666666666665,
+          "uy_mm": -0.26249999999999996
+        }
+      },
+      "axial_n": {
+        "AB": 6666.666666666665,
+        "AC": -8333.333333333332,
+        "BC": -8333.333333333332
+      },
+      "reactions": {
+        "A": {
+          "fx_n": 4.547473508864641e-13,
+          "fy_n": 5000.0
+        },
+        "B": {
+          "fx_n": 0.0,
+          "fy_n": 5000.0
+        }
+      },
+      "max_down_roof_mm": -0.26249999999999996,
+      "max_up_roof_mm": 0.0,
+      "max_abs_roof_mm": -0.26249999999999996,
+      "max_abs_vertical_mm": 0.26249999999999996,
+      "equilibrium": {
+        "sum_fx_n": 4.547473508864641e-13,
+        "sum_fy_n": 0.0,
+        "sum_m_nmm": 0.0,
+        "max_free_residual_n": 4.547473508864641e-13
+      },
+      "loads": {
+        "A": {
+          "fx_n": 0.0,
+          "fy_n": 0.0
+        },
+        "B": {
+          "fx_n": 0.0,
+          "fy_n": 0.0
+        },
+        "C": {
+          "fx_n": 0.0,
+          "fy_n": -10000.0
+        }
+      },
+      "stiffness_pivot_ratio": 2.6565
+    }
+  },
+  "envelope": {
+    "AB": {
+      "max_tension_n": 6666.666666666665,
+      "max_compression_n": 0.0,
+      "tension_case": "F10",
+      "compression_case": null
+    },
+    "AC": {
+      "max_tension_n": 0.0,
+      "max_compression_n": -8333.333333333332,
+      "tension_case": null,
+      "compression_case": "F10"
+    },
+    "BC": {
+      "max_tension_n": 0.0,
+      "max_compression_n": -8333.333333333332,
+      "tension_case": null,
+      "compression_case": "F10"
+    }
+  },
+  "geometry_diagnostics": {
+    "diagonal_angles": [
+      {
+        "member": "AC",
+        "angle_deg": 36.87,
+        "within_preferred": false
+      },
+      {
+        "member": "BC",
+        "angle_deg": 36.87,
+        "within_preferred": false
+      }
+    ],
+    "purlin_spans": [],
+    "angle_preferred_fraction": 0.0,
+    "max_roof_step_m": 0.0,
+    "all_roof_steps_within_max": true
+  },
+  "warnings": [
+    "Análise linear elástica 2D, barras articuladas. Sem ELU resistente, ligações, flambagem ou estabilidade fora do plano.",
+    "Cargas transversais entre nós representadas somente por resultantes nodais; flexão local do banzo não avaliada.",
+    "Combinações fornecidas pelo usuário. Nenhuma conformidade automática à NBR 8681, NBR 14762 ou NBR 8800.",
+    "Massa automática da treliça exclui ligações, chapas, soldas, acabamentos e acessórios.",
+    "Convenção de unidades do projeto: 1 kgf = 10 N.",
+    "Estabilidade: travamentos declarados não constituem comprovação da estabilidade global ou resistência axial.",
+    "v0.9: triagem axial por escoamento bruto e Euler é INFORMATIVA; modos local, distorcional, flexo-torcional e ligações não verificados.",
+    "Capacidades externas do DimPerfil são fornecidas pelo usuário; não auditadas internamente.",
+    "Há diagonais fora do intervalo angular preferencial.",
+    "Dados de estabilidade pendentes para 3 de 3 barras; NÃO equivale a aprovação resistente."
+  ],
+  "load_audit": {
+    "F10": {
+      "case_id": "F10",
+      "kind": "nodal",
+      "entries": [
+        {
+          "case_id": "F10",
+          "origin": "nodal",
+          "source": "load_1",
+          "node": "C",
+          "x_mm": 2000.0,
+          "y_mm": 1500.0,
+          "fx_n": 0.0,
+          "fy_n": -10000.0,
+          "moment_origin_nmm": -20000000.0,
+          "input_fx": 0,
+          "input_fy": -10,
+          "input_unit": "kN"
+        }
+      ],
+      "n_entries": 1,
+      "sum_fx_n": 0.0,
+      "sum_fy_n": -10000.0,
+      "sum_m_origin_nmm": -20000000.0,
+      "residual": {
+        "fx_n": 0.0,
+        "fy_n": 0.0,
+        "moment_nmm": 0.0
+      },
+      "status": "CONSISTENTE_ALGEBRICAMENTE",
+      "scope": "Conservação da transformação nodal; não valida modelo físico nem coeficientes normativos"
+    }
+  },
+  "stability": {
+    "schema": "poe-stability-data/v1",
+    "members": {
+      "AB": {
+        "member_id": "AB",
+        "group": "inferior",
+        "profile": "AREA_EXPLICITA",
+        "length_mm": 4000.0,
+        "rotation_deg": 0.0,
+        "axis_in_plane": null,
+        "axis_out_of_plane": null,
+        "unbraced_in_plane_mm": 4000.0,
+        "unbraced_out_of_plane_mm": null,
+        "torsion_unbraced_mm": null,
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "effective_in_plane_mm": 4000.0,
+        "effective_out_of_plane_mm": null,
+        "out_of_plane_source": null,
+        "radii_reference_mm": {},
+        "lambda_in_plane_reference": null,
+        "lambda_out_plane_reference": null,
+        "restraint_note": "",
+        "restraint_reference": "",
+        "state": "PENDENTE",
+        "missing": [
+          "comprimento_lateral_nao_definido",
+          "eixos_da_secao_nao_associados_ao_plano",
+          "propriedades_transversais_nao_validadas_para_arranjo_ou_rotacao",
+          "comprimento_torcional_nao_definido",
+          "justificativa_dos_travamentos_pendente"
+        ],
+        "resistance_verified": false
+      },
+      "AC": {
+        "member_id": "AC",
+        "group": "diagonal",
+        "profile": "AREA_EXPLICITA",
+        "length_mm": 2500.0,
+        "rotation_deg": 0.0,
+        "axis_in_plane": null,
+        "axis_out_of_plane": null,
+        "unbraced_in_plane_mm": 2500.0,
+        "unbraced_out_of_plane_mm": null,
+        "torsion_unbraced_mm": null,
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "effective_in_plane_mm": 2500.0,
+        "effective_out_of_plane_mm": null,
+        "out_of_plane_source": null,
+        "radii_reference_mm": {},
+        "lambda_in_plane_reference": null,
+        "lambda_out_plane_reference": null,
+        "restraint_note": "",
+        "restraint_reference": "",
+        "state": "PENDENTE",
+        "missing": [
+          "comprimento_lateral_nao_definido",
+          "eixos_da_secao_nao_associados_ao_plano",
+          "propriedades_transversais_nao_validadas_para_arranjo_ou_rotacao",
+          "comprimento_torcional_nao_definido",
+          "justificativa_dos_travamentos_pendente"
+        ],
+        "resistance_verified": false
+      },
+      "BC": {
+        "member_id": "BC",
+        "group": "diagonal",
+        "profile": "AREA_EXPLICITA",
+        "length_mm": 2500.0,
+        "rotation_deg": 0.0,
+        "axis_in_plane": null,
+        "axis_out_of_plane": null,
+        "unbraced_in_plane_mm": 2500.0,
+        "unbraced_out_of_plane_mm": null,
+        "torsion_unbraced_mm": null,
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "effective_in_plane_mm": 2500.0,
+        "effective_out_of_plane_mm": null,
+        "out_of_plane_source": null,
+        "radii_reference_mm": {},
+        "lambda_in_plane_reference": null,
+        "lambda_out_plane_reference": null,
+        "restraint_note": "",
+        "restraint_reference": "",
+        "state": "PENDENTE",
+        "missing": [
+          "comprimento_lateral_nao_definido",
+          "eixos_da_secao_nao_associados_ao_plano",
+          "propriedades_transversais_nao_validadas_para_arranjo_ou_rotacao",
+          "comprimento_torcional_nao_definido",
+          "justificativa_dos_travamentos_pendente"
+        ],
+        "resistance_verified": false
+      }
+    },
+    "lateral_bracing": [],
+    "summary": {
+      "complete_declared": 0,
+      "pending": 3
+    },
+    "disclaimer": "Somente dados e índices geométricos de referência; sem resistência NBR 14762, sem verificação de contraventamentos ou flambagem 3D."
+  },
+  "section_properties": {
+    "schema": "poe-sections/v1",
+    "members": {
+      "AB": {
+        "member_id": "AB",
+        "state": "DADOS_GEOMETRICOS_NAO_DISPONIVEIS",
+        "area_mm2": 1000.0
+      },
+      "AC": {
+        "member_id": "AC",
+        "state": "DADOS_GEOMETRICOS_NAO_DISPONIVEIS",
+        "area_mm2": 1000.0
+      },
+      "BC": {
+        "member_id": "BC",
+        "state": "DADOS_GEOMETRICOS_NAO_DISPONIVEIS",
+        "area_mm2": 1000.0
+      }
+    },
+    "warnings": [],
+    "scope": "Somente propriedades geométricas elásticas; não comprova ação composta, flambagem, torção nem ligações."
+  },
+  "axial_screen": {
+    "schema": "poe-axial-screen/v1",
+    "members": {
+      "AB": {
+        "member_id": "AB",
+        "profile": "AREA_EXPLICITA",
+        "group": "inferior",
+        "tension_sd_n": 6666.666666666665,
+        "compression_sd_n": 0.0,
+        "gross_yield_screen_n": 227272.72727272726,
+        "gross_yield_ratio": 0.02933333333333333,
+        "gross_yield_screen_exceeded": false,
+        "euler_modes": [],
+        "euler_min_n": null,
+        "euler_critical_exceeded": false,
+        "local_buckling": "NAO_VERIFICADA",
+        "distortional_buckling": "NAO_VERIFICADA",
+        "flexural_torsional_buckling": "NAO_VERIFICADA",
+        "net_section_fracture": "NAO_VERIFICADA",
+        "connections": "NAO_VERIFICADAS",
+        "verification_status": "NAO_VERIFICADO_NORMATIVAMENTE",
+        "external_capacity": {
+          "state": "NAO_INFORMADA",
+          "utilization": null,
+          "tension_utilization": null,
+          "compression_utilization": null,
+          "source": null
+        }
+      },
+      "AC": {
+        "member_id": "AC",
+        "profile": "AREA_EXPLICITA",
+        "group": "diagonal",
+        "tension_sd_n": 0.0,
+        "compression_sd_n": 8333.333333333332,
+        "gross_yield_screen_n": 227272.72727272726,
+        "gross_yield_ratio": 0.0,
+        "gross_yield_screen_exceeded": false,
+        "euler_modes": [],
+        "euler_min_n": null,
+        "euler_critical_exceeded": false,
+        "local_buckling": "NAO_VERIFICADA",
+        "distortional_buckling": "NAO_VERIFICADA",
+        "flexural_torsional_buckling": "NAO_VERIFICADA",
+        "net_section_fracture": "NAO_VERIFICADA",
+        "connections": "NAO_VERIFICADAS",
+        "verification_status": "NAO_VERIFICADO_NORMATIVAMENTE",
+        "external_capacity": {
+          "state": "NAO_INFORMADA",
+          "utilization": null,
+          "tension_utilization": null,
+          "compression_utilization": null,
+          "source": null
+        }
+      },
+      "BC": {
+        "member_id": "BC",
+        "profile": "AREA_EXPLICITA",
+        "group": "diagonal",
+        "tension_sd_n": 0.0,
+        "compression_sd_n": 8333.333333333332,
+        "gross_yield_screen_n": 227272.72727272726,
+        "gross_yield_ratio": 0.0,
+        "gross_yield_screen_exceeded": false,
+        "euler_modes": [],
+        "euler_min_n": null,
+        "euler_critical_exceeded": false,
+        "local_buckling": "NAO_VERIFICADA",
+        "distortional_buckling": "NAO_VERIFICADA",
+        "flexural_torsional_buckling": "NAO_VERIFICADA",
+        "net_section_fracture": "NAO_VERIFICADA",
+        "connections": "NAO_VERIFICADAS",
+        "verification_status": "NAO_VERIFICADO_NORMATIVAMENTE",
+        "external_capacity": {
+          "state": "NAO_INFORMADA",
+          "utilization": null,
+          "tension_utilization": null,
+          "compression_utilization": null,
+          "source": null
+        }
+      }
+    },
+    "summary": {
+      "total": 3,
+      "external_declared": 0,
+      "external_missing": 3,
+      "external_exceeds": 0,
+      "euler_warning": 0,
+      "no_global_geometry": 3
+    },
+    "fy_mpa": 250.0,
+    "gamma_yield_screen_user_defined": 1.1,
+    "warning": "Triagem informativa; não determina N_Rd da NBR 14762, não libera uso executivo ou aprovação ELU."
+  },
+  "camber": {
+    "state": "PENDENTE_CASO_REFERENCIA",
+    "reference_case": "G1",
+    "warning": "Sem caso de referência; nenhuma geometria de contraflecha foi gerada.",
+    "nodes": []
+  },
+  "software_version": "0.9.0-beta",
+  "envelope_source": "individual_load_cases"
+}

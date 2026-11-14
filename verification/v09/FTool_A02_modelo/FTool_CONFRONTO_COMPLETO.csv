@@ -1,0 +1,14 @@
+﻿tipo;identificador;componente;valor_POE;valor_FTOOL_PREENCHER;unidade;tolerancia_rel_percent;tolerancia_abs
+barra;AB;N;6.666666667;;kN;0.1;0.01
+barra;AC;N;-8.333333333;;kN;0.1;0.01
+barra;BC;N;-8.333333333;;kN;0.1;0.01
+deslocamento;A;UX;0.0;;mm;0.5;0.02
+deslocamento;A;UY;0.0;;mm;0.5;0.02
+deslocamento;B;UX;0.133333333;;mm;0.5;0.02
+deslocamento;B;UY;0.0;;mm;0.5;0.02
+deslocamento;C;UX;0.066666667;;mm;0.5;0.02
+deslocamento;C;UY;-0.2625;;mm;0.5;0.02
+reacao;A;RX;0.0;;kN;0.1;0.01
+reacao;A;RY;5.0;;kN;0.1;0.01
+reacao;B;RX;0.0;;kN;0.1;0.01
+reacao;B;RY;5.0;;kN;0.1;0.01

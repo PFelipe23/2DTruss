@@ -1,0 +1,12 @@
+[
+  {
+    "node": "A",
+    "ux": true,
+    "uy": true
+  },
+  {
+    "node": "B",
+    "ux": false,
+    "uy": true
+  }
+]

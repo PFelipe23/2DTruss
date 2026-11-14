@@ -1,0 +1,11 @@
+# 2DTruss — line endings and binary assets
+* text=auto
+*.py text eol=lf
+*.pyw text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.md text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.obj text eol=lf

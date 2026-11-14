@@ -1,0 +1,59 @@
+{
+  "schema": "poe-truss-python/v1",
+  "name": "Olídio — verificação didática da carga nodal 35 kgf/m² × 7,50 m × 1,675 m",
+  "geometry": {
+    "span_m": 3.35,
+    "frame_spacing_m": 7.5,
+    "panels": 2,
+    "height_m": 0.75,
+    "rise_m": 0.0,
+    "roof_shape": "parallel",
+    "truss_type": "Pratt",
+    "purlin_max_m": 1.675,
+    "angle_min_deg": 45.0,
+    "angle_max_deg": 60.0
+  },
+  "material": {
+    "E_MPa": 200000
+  },
+  "sections": {
+    "superior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "inferior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "montante": {
+      "profile": "U 100x50x2,65",
+      "count": 1
+    },
+    "diagonal": {
+      "profile": "L laminada 60x60x4",
+      "count": 2
+    }
+  },
+  "load_cases": [
+    {
+      "id": "G35",
+      "name": "Ação superficial horizontal 35 kgf/m²",
+      "kind": "surface",
+      "value": 35,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    }
+  ],
+  "combinations": [
+    {
+      "id": "S_G35",
+      "name": "Sem majoração — benchmark distribuição",
+      "factors": {
+        "G35": 1.0
+      }
+    }
+  ]
+}

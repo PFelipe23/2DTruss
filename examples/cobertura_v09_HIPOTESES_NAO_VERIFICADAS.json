@@ -1,0 +1,244 @@
+{
+  "schema": "poe-truss-python/v1",
+  "name": "Exemplo v0.9 beta — treliça 16 m, módulos adicionais (SEM ELU)",
+  "geometry": {
+    "span_m": 16.0,
+    "frame_spacing_m": 5.0,
+    "panels": 16,
+    "height_m": 1.1,
+    "rise_m": 1.2,
+    "roof_shape": "gable",
+    "truss_type": "Pratt",
+    "purlin_max_m": 1.2,
+    "angle_min_deg": 45.0,
+    "angle_max_deg": 60.0
+  },
+  "material": {
+    "E_MPa": 200000,
+    "fy_MPa": 250.0
+  },
+  "sections": {
+    "superior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "inferior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "montante": {
+      "profile": "U 100x50x2,65",
+      "count": 1
+    },
+    "diagonal": {
+      "profile": "L laminada 60x60x4",
+      "count": 2
+    }
+  },
+  "load_cases": [
+    {
+      "id": "G1",
+      "name": "Peso próprio das barras",
+      "kind": "self_weight"
+    },
+    {
+      "id": "G2",
+      "name": "Telhas 8 kgf/m² (superfície)",
+      "kind": "surface",
+      "value": 8,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G3",
+      "name": "Terças 6 kgf/m² (projeção)",
+      "kind": "surface",
+      "value": 6,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G4",
+      "name": "Forro 8 kgf/m²",
+      "kind": "surface",
+      "value": 8,
+      "force_unit": "kgf",
+      "application": "bottom",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G5",
+      "name": "Utilidades 15 kgf/m²",
+      "kind": "surface",
+      "value": 15,
+      "force_unit": "kgf",
+      "application": "bottom",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "Q1",
+      "name": "Sobrecarga 25 kgf/m²",
+      "kind": "surface",
+      "value": 25,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "W_UP",
+      "name": "Vento sucção 30 kgf/m²",
+      "kind": "surface",
+      "value": 30,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "outward_normal",
+      "zone": "all"
+    },
+    {
+      "id": "W_DOWN",
+      "name": "Vento pressão 30 kgf/m²",
+      "kind": "surface",
+      "value": 30,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "inward_normal",
+      "zone": "all"
+    }
+  ],
+  "combinations": [
+    {
+      "id": "S_GRAV",
+      "name": "Demonstração: G+Q (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "Q1": 1
+      }
+    },
+    {
+      "id": "S_SUCC",
+      "name": "Demonstração: G+W sucção (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "W_UP": 1
+      }
+    },
+    {
+      "id": "S_PRESS",
+      "name": "Demonstração: G+W pressão (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "W_DOWN": 1
+      }
+    },
+    {
+      "id": "G_PERM",
+      "name": "Ações permanentes demonstrativas",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1
+      }
+    }
+  ],
+  "section_arrangements": {
+    "superior": {
+      "centroid_dx_mm": 80.0,
+      "centroid_dy_mm": 0,
+      "assembly_type": "duplo_lado_a_lado",
+      "connection_reference": "Hipótese geométrica; espaçadores/ligação não dimensionados"
+    },
+    "inferior": {
+      "centroid_dx_mm": 80.0,
+      "centroid_dy_mm": 0,
+      "assembly_type": "duplo_lado_a_lado",
+      "connection_reference": "Hipótese geométrica; espaçadores/ligação não dimensionados"
+    },
+    "diagonal": {
+      "centroid_dx_mm": 30.0,
+      "centroid_dy_mm": 0,
+      "assembly_type": "cantoneiras_duplas",
+      "connection_reference": "Ixy do L não informado; seção apenas ilustrativa"
+    }
+  },
+  "camber": {
+    "reference_case": "G_PERM",
+    "compensation_fraction": 1.0
+  },
+  "axial_options": {
+    "gamma_yield_screen": 1.1
+  },
+  "external_resistances": {
+    "members": {}
+  },
+  "stability": {
+    "groups": {
+      "superior": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "unbraced_out_of_plane_mm": 4000,
+        "torsion_unbraced_mm": 4000,
+        "restraint_note": "Exemplo apenas: travamentos hipotéticos a cada 4 m, avaliar efetividade",
+        "restraint_reference": "Hipótese didática sem verificação de contraventamento"
+      },
+      "inferior": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "unbraced_out_of_plane_mm": 4000,
+        "torsion_unbraced_mm": 4000,
+        "restraint_reference": "Hipótese didática: conferir estabilidade durante sucção"
+      },
+      "montante": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "unbraced_out_of_plane_mm": 1100,
+        "torsion_unbraced_mm": 1100,
+        "restraint_reference": "Hipótese didática não validada"
+      },
+      "diagonal": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "unbraced_out_of_plane_mm": 1600,
+        "torsion_unbraced_mm": 1600,
+        "restraint_reference": "Hipótese didática não validada"
+      }
+    },
+    "members": {},
+    "lateral_bracing": []
+  }
+}

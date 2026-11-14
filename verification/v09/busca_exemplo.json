@@ -1,0 +1,71 @@
+{
+  "schema": "poe-optimization/v1",
+  "method": "coordinate_greedy_E_L_mass",
+  "evaluated": 5,
+  "invalid": [
+    "superior/Ue 200x75x20x3,00: perfil não cadastrado"
+  ],
+  "steps": [
+    {
+      "group": "superior",
+      "candidates": 1,
+      "selected_profile": "Ue 150x60x20x3,00",
+      "mass_kg": 776.1199,
+      "flecha_mm": 6.69562,
+      "service_ok": true,
+      "preliminary_axial_alerts": 0
+    },
+    {
+      "group": "inferior",
+      "candidates": 1,
+      "selected_profile": "Ue 150x60x20x3,00",
+      "mass_kg": 776.1199,
+      "flecha_mm": 6.69562,
+      "service_ok": true,
+      "preliminary_axial_alerts": 0
+    },
+    {
+      "group": "montante",
+      "candidates": 1,
+      "selected_profile": "U 100x50x2,65",
+      "mass_kg": 776.1199,
+      "flecha_mm": 6.69562,
+      "service_ok": true,
+      "preliminary_axial_alerts": 0
+    },
+    {
+      "group": "diagonal",
+      "candidates": 1,
+      "selected_profile": "L laminada 60x60x4",
+      "mass_kg": 776.1199,
+      "flecha_mm": 6.69562,
+      "service_ok": true,
+      "preliminary_axial_alerts": 0
+    }
+  ],
+  "selected_sections": {
+    "superior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "inferior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "montante": {
+      "profile": "U 100x50x2,65",
+      "count": 1
+    },
+    "diagonal": {
+      "profile": "L laminada 60x60x4",
+      "count": 2
+    }
+  },
+  "mass_kg": 776.1198827073423,
+  "service_case": "S_GRAV",
+  "flecha_mm": 6.69561508609701,
+  "flecha_limit_mm": 64.0,
+  "service_limit_ok": true,
+  "resistant_design_status": "PENDENTE_NBR_14762_E_LIGACOES",
+  "warning": "Pesquisa local sequencial; não comprova ótimo global, resistência, combinações normativas ou dimensionamento ELU."
+}

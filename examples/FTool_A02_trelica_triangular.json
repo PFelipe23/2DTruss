@@ -1,0 +1,27 @@
+{
+  "schema": "poe-truss-python/v1",
+  "name": "FTool A02 — treliça triangular simétrica (benchmark analítico)",
+  "geometry": {"frame_spacing_m": 1},
+  "material": {"E_MPa": 200000},
+  "model_override": {
+    "nodes": [
+      {"id":"A","x_mm":0,"y_mm":0},
+      {"id":"B","x_mm":4000,"y_mm":0},
+      {"id":"C","x_mm":2000,"y_mm":1500}
+    ],
+    "members": [
+      {"id":"AB","i":"A","j":"B","group":"inferior","area_mm2":1000},
+      {"id":"AC","i":"A","j":"C","group":"diagonal","area_mm2":1000},
+      {"id":"BC","i":"B","j":"C","group":"diagonal","area_mm2":1000}
+    ],
+    "supports": [
+      {"node":"A","ux":true,"uy":true},
+      {"node":"B","ux":false,"uy":true}
+    ]
+  },
+  "load_cases":[
+    {"id":"F10","name":"F10 kN vertical descendente em C","kind":"nodal",
+     "loads":[{"node":"C","fx":0,"fy":-10,"force_unit":"kN"}]}
+  ],
+  "combinations": []
+}

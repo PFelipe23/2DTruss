@@ -1,0 +1,16 @@
+{
+  "schema":"poe-trelica-cff/v05",
+  "units":{"force":"kgf","length":"m","disp":"mm","e":"GPa","stress":"MPa"},
+  "model":{
+    "span_mm":16000,"spacing_mm":5000,"panels":8,"height_mm":900,
+    "e_mpa":200000,"gamma_g":1.4,"gamma_q":1.5,
+    "geometry":"Pratt","top_shape":"pitched","roof_rise_mm":700,
+    "purlin_max_mm":1300,"angle_min_deg":45,"angle_max_deg":60,
+    "superior":"U 150x50x3,00","inferior":"U 150x50x3,00",
+    "montante":"U 100x50x2,65","diagonal":"U 100x50x2,65",
+    "asm_superior_count":"2","asm_inferior_count":"2",
+    "asm_montante_count":"1","asm_diagonal_count":"1",
+    "g_telha":0.00008,"g_terca":0.00006,"g_trelica":0.00040,"q_surface":0.00025,
+    "wind_mode":"both","wind_surface":0.00030
+  }
+}

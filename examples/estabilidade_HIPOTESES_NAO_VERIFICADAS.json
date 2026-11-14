@@ -1,0 +1,205 @@
+{
+  "schema": "poe-truss-python/v1",
+  "name": "EXEMPLO DIDÁTICO — hipóteses de travamento declaradas, sem ELU",
+  "geometry": {
+    "span_m": 16.0,
+    "frame_spacing_m": 5.0,
+    "panels": 16,
+    "height_m": 1.1,
+    "rise_m": 1.2,
+    "roof_shape": "gable",
+    "truss_type": "Pratt",
+    "purlin_max_m": 1.2,
+    "angle_min_deg": 45.0,
+    "angle_max_deg": 60.0
+  },
+  "material": {
+    "E_MPa": 200000
+  },
+  "sections": {
+    "superior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "inferior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "montante": {
+      "profile": "U 100x50x2,65",
+      "count": 1
+    },
+    "diagonal": {
+      "profile": "L laminada 60x60x4",
+      "count": 2
+    }
+  },
+  "load_cases": [
+    {
+      "id": "G1",
+      "name": "Peso próprio das barras",
+      "kind": "self_weight"
+    },
+    {
+      "id": "G2",
+      "name": "Telhas 8 kgf/m² (superfície)",
+      "kind": "surface",
+      "value": 8,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G3",
+      "name": "Terças 6 kgf/m² (projeção)",
+      "kind": "surface",
+      "value": 6,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G4",
+      "name": "Forro 8 kgf/m²",
+      "kind": "surface",
+      "value": 8,
+      "force_unit": "kgf",
+      "application": "bottom",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "G5",
+      "name": "Utilidades 15 kgf/m²",
+      "kind": "surface",
+      "value": 15,
+      "force_unit": "kgf",
+      "application": "bottom",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "Q1",
+      "name": "Sobrecarga 25 kgf/m²",
+      "kind": "surface",
+      "value": 25,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all"
+    },
+    {
+      "id": "W_UP",
+      "name": "Vento sucção 30 kgf/m²",
+      "kind": "surface",
+      "value": 30,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "outward_normal",
+      "zone": "all"
+    },
+    {
+      "id": "W_DOWN",
+      "name": "Vento pressão 30 kgf/m²",
+      "kind": "surface",
+      "value": 30,
+      "force_unit": "kgf",
+      "application": "top",
+      "basis": "roof_surface",
+      "direction": "inward_normal",
+      "zone": "all"
+    }
+  ],
+  "combinations": [
+    {
+      "id": "S_GRAV",
+      "name": "Demonstração: G+Q (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "Q1": 1
+      }
+    },
+    {
+      "id": "S_SUCC",
+      "name": "Demonstração: G+W sucção (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "W_UP": 1
+      }
+    },
+    {
+      "id": "S_PRESS",
+      "name": "Demonstração: G+W pressão (fatores manuais)",
+      "factors": {
+        "G1": 1,
+        "G2": 1,
+        "G3": 1,
+        "G4": 1,
+        "G5": 1,
+        "W_DOWN": 1
+      }
+    }
+  ],
+  "stability": {
+    "groups": {
+      "superior": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "torsion_unbraced_mm": 4250,
+        "restraint_reference": "Hipótese didática de travamento — eficácia NÃO validada"
+      },
+      "inferior": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "axis_in_plane": "x",
+        "axis_out_of_plane": "y",
+        "unbraced_out_of_plane_mm": 8000,
+        "restraint_reference": "Hipótese didática — projetista deve verificar"
+      },
+      "diagonal": {
+        "k_in_plane": 1.0,
+        "k_out_of_plane": 1.0,
+        "unbraced_out_of_plane_mm": 3000,
+        "restraint_reference": "Somente demonstração"
+      }
+    },
+    "lateral_bracing": [
+      {
+        "group": "superior",
+        "node_ids": [
+          "T00",
+          "T04",
+          "T08",
+          "T12",
+          "T16"
+        ],
+        "assumed_effective": true,
+        "reference": "EXEMPLO: hipoteticamente travado; comprovação do contraventamento não incluída"
+      }
+    ],
+    "members": {
+      "M002": {
+        "unbraced_out_of_plane_mm": 2250,
+        "restraint_reference": "Exceção para teste; não implica verificação física"
+      }
+    }
+  }
+}
