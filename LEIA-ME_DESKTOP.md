@@ -87,7 +87,7 @@ A aba **Combinações** permite criar, excluir e editar fatores assinados por ca
 
 Em **Ações → Inserir cargas**, escolha ou crie um caso nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a mesma força em vários nós, selecione-os com Ctrl+clique e use **Aplicar a n nós selecionados**. Cada nó recebe uma parcela com os mesmos valores. Clique numa parcela da tabela para editar ou remover essa linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
 
-**Ações gerais** mostra os campos pertinentes ao tipo do caso. Selecione um caso ou combinação no desenho e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. As setas apontam para os nós e seus comprimentos são relativos à maior força do caso. A faixa mostra a soma de `Fx` e `Fy` em kN. Use **Valores** para exibir magnitudes onde houver espaço e passe o cursor sobre um nó para ver suas componentes.
+**Ações gerais** mostra os campos pertinentes ao tipo do caso. Selecione um caso ou combinação no desenho e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. As setas ficam acima dos nós, ligadas por uma linha pontilhada. Cada seta mantém a direção da força e seu comprimento é relativo à maior força do caso. A faixa mostra a soma de `Fx` e `Fy` em kN. **Valores** distribui as magnitudes acima das setas e omite os rótulos que não couberem. Passe o cursor sobre o nó para ver as componentes.
 
 ## Área de trabalho
 

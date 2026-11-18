@@ -11,6 +11,60 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_force_vectors_stay_above_nodes_and_labels_fit_without_overlap(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem
+        from desktop.qt.app import DesktopApp
+        from desktop.qt.viewport import ForceVectorItem, NodeItem
+
+        app = QApplication.instance() or QApplication([])
+        for fx, fy in [(0, -10), (0, 10), (10, 0), (-6, 8), (6, -8)]:
+            with self.subTest(fx=fx, fy=fy):
+                vector = ForceVectorItem('N1', QPointF(), fx, fy, 10)
+                tail, head = (vector.path().elementAt(i) for i in (0, 1))
+                self.assertLess(vector.boundingRect().bottom(), -7)
+                self.assertAlmostEqual(head.x - tail.x, 5 * fx)
+                self.assertAlmostEqual(head.y - tail.y, -5 * fy)
+
+        window = DesktopApp()
+        window.show()
+        try:
+            window.open_general_actions()
+            window.cases.setCurrentText('W_UP')
+            window._set_overlay('show_ids', True)
+            window.force_values.click()
+            app.processEvents()
+            window.fit()
+            view = window.view
+            view.scale(.45, .45)
+            view._place_force_labels()
+            transform = view.viewportTransform()
+            annotations = {
+                item.text() for item in view.scene().items()
+                if isinstance(item, QGraphicsSimpleTextItem) and item.parentItem() is None
+            }
+            self.assertIn('△ XY', annotations)
+            self.assertIn(window.session.model.nodes[0].id, annotations)
+            other_items = [
+                item.deviceTransform(transform).mapRect(item.boundingRect())
+                for item in view.items(view.viewport().rect())
+                if isinstance(item, (NodeItem, ForceVectorItem))
+                or isinstance(item, QGraphicsSimpleTextItem) and item.parentItem() is None
+            ]
+            labels = []
+            for vector in view._force_items:
+                if not vector.label.isVisible():
+                    continue
+                rect = vector.label.deviceTransform(transform).mapRect(vector.label.boundingRect())
+                self.assertTrue(view.viewport().rect().contains(rect.toAlignedRect()))
+                self.assertFalse(any(rect.intersects(other) for other in other_items + labels))
+                labels.append(rect)
+            self.assertGreater(len(labels), 0)
+            self.assertLess(len(labels), len(view._force_items))
+        finally:
+            window.close()
+
     def test_batch_nodal_loads_follow_the_canvas_case_and_edit_one_parcel(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import Qt

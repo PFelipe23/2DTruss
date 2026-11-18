@@ -6,7 +6,7 @@ por desktop.editing + Session.update_project e são validadas pelo núcleo.
 from __future__ import annotations
 from math import atan2,ceil,degrees,floor,hypot,isfinite,log10
 from PySide6.QtCore import Qt,QLineF,QPointF,QSignalBlocker,Signal,QRectF
-from PySide6.QtGui import QColor,QPen,QBrush,QFont,QPainter,QPainterPath,QTransform
+from PySide6.QtGui import QColor,QPen,QBrush,QFont,QPainter,QPainterPath,QRegion,QTransform
 from PySide6.QtWidgets import (QGraphicsView,QGraphicsScene,QGraphicsEllipseItem,
                                QGraphicsLineItem,QGraphicsPathItem,QGraphicsSimpleTextItem,QGraphicsItem)
 
@@ -61,15 +61,15 @@ class MemberItem(QGraphicsLineItem):
 
 
 class ForceVectorItem(QGraphicsPathItem):
-    """Seta proporcional, com ponta junto ao nó e traço legível no zoom."""
+    """Seta proporcional posicionada acima do nó em pixels de tela."""
 
     def __init__(self, node, position, fx, fy, maximum):
         magnitude = hypot(fx, fy)
         direction = QPointF(fx / magnitude, -fy / magnitude)
         normal = QPointF(-direction.y(), direction.x())
         length = 50 * magnitude / maximum
-        head = direction * -7
-        tail = head - direction * length
+        tail = QPointF()
+        head = direction * length
         wing = min(7, length * .5)
         base = head - direction * wing
         path = QPainterPath(tail)
@@ -77,6 +77,9 @@ class ForceVectorItem(QGraphicsPathItem):
         path.moveTo(base - normal * wing * .55)
         path.lineTo(head)
         path.lineTo(base + normal * wing * .55)
+        bounds = path.boundingRect()
+        offset = QPointF(-bounds.center().x(), -13 - bounds.bottom())
+        path.translate(offset)
         super().__init__(path)
         self.setPos(position)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -86,19 +89,15 @@ class ForceVectorItem(QGraphicsPathItem):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
         self.setToolTip(f'{node} · Fx {fx/1000:+.3f} kN · Fy {fy/1000:+.3f} kN')
+        anchor = offset + head * .5
+        guide = QGraphicsLineItem(0, -7, anchor.x(), anchor.y(), self)
+        guide.setPen(QPen(QColor('#AC8A69'), 1, Qt.PenStyle.DotLine))
+        guide.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent)
+        guide.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.label = QGraphicsSimpleTextItem(f'{magnitude/1000:.2f} kN', self)
         self.label.setFont(QFont('Segoe UI', 9))
         self.label.setBrush(QBrush(QColor('#895019')))
         self.label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-        above = direction.y() < -.35
-        anchor = head + direction * 13 if above else tail - direction * 4
-        bounds = self.label.boundingRect()
-        if direction.x() >= .25:
-            anchor.setX(anchor.x() - bounds.width())
-        elif direction.x() > -.25:
-            anchor.setX(anchor.x() - bounds.width() / 2)
-        anchor.setY(anchor.y() - bounds.height() * (.9 if above or direction.y() >= 0 else .15))
-        self.label.setPos(anchor)
 
 
 class TrussView(QGraphicsView):
@@ -127,6 +126,7 @@ class TrussView(QGraphicsView):
         self.show_ids=False;self.show_efforts=False;self.show_forces=False
         self.show_load_values = False
         self._force_items = []
+        self._annotations = []
         self.show_deformed=False;self.show_all_labels=False
         self._members={};self._nodes={};self._drafts={};self._pos={}
         self._analysis=None;self._model=None;self._session=None
@@ -203,7 +203,7 @@ class TrussView(QGraphicsView):
         item.setRotation(rotation);item.setPos(pos)
         item.setZValue(50)
         self.scene().addItem(item)
-        return item
+        self._annotations.append(item)
 
     def render(self,session,analysis_id=None,*,fit=False):
         """Renderização sem recalcular ou modificar a estrutura."""
@@ -212,6 +212,7 @@ class TrussView(QGraphicsView):
         self._analysis_id = analysis_id
         self._analysis=(session.result or {}).get('analyses',{}).get(analysis_id) if analysis_id else None
         self._force_items.clear()
+        self._annotations.clear()
         scene=self.scene();scene.blockSignals(True);scene.clear()
         self._members={};self._nodes={};self._drafts={}
         self._pos={n.id:QPointF(n.x,-n.y*self._vertical) for n in model.nodes}
@@ -285,7 +286,7 @@ class TrussView(QGraphicsView):
         except (KeyError, TypeError, ValueError, OverflowError) as error:
             self.forces_displayed.emit({}, str(error))
             return
-        vectors.sort(reverse=True)
+        vectors.sort(key=lambda vector: (-vector[0], self._pos[vector[1]].x()))
         if vectors:
             maximum = vectors[0][0]
             for _, node, fx, fy in vectors:
@@ -302,15 +303,41 @@ class TrussView(QGraphicsView):
         self._place_force_labels()
 
     def _place_force_labels(self):
-        occupied = []
+        if not self.show_load_values:
+            for arrow in self._force_items:
+                arrow.label.hide()
+            return
+        if not self._force_items:
+            return
+
+        viewport = self.viewport().rect()
+        transform = self.viewportTransform()
+        occupied = QRegion()
+        for item in self.items(viewport):
+            if (isinstance(item, (NodeItem, ForceVectorItem))
+                    or isinstance(item, QGraphicsSimpleTextItem) and item.parentItem() is None):
+                rect = item.deviceTransform(transform).mapRect(item.boundingRect())
+                occupied += QRegion(rect.toAlignedRect())
+
         for arrow in self._force_items:
             label = arrow.label
-            rect = label.boundingRect().translated(QPointF(self.mapFromScene(arrow.pos())) + label.pos())
-            rect = rect.adjusted(-3, -1, 3, 1)
-            visible = self.show_load_values and not any(rect.intersects(other) for other in occupied)
-            label.setVisible(visible)
-            if visible:
-                occupied.append(rect)
+            label.hide()
+            device = arrow.deviceTransform(transform)
+            shaft = device.mapRect(arrow.boundingRect())
+            if not viewport.intersects(shaft.toAlignedRect()):
+                continue
+            bounds = label.boundingRect()
+            left = shaft.center().x() - bounds.width() / 2
+            top = shaft.top() - bounds.height() - 4
+            # Tenta uma segunda linha alinhada à seta antes de omitir o valor.
+            for level in (0, 1):
+                position = QPointF(left, top - level * (bounds.height() + 3))
+                candidate = QRectF(position, bounds.size()).adjusted(-3, -1, 3, 1).toAlignedRect()
+                if viewport.contains(candidate) and not occupied.intersects(candidate):
+                    label.setPos(position - device.map(QPointF()) - bounds.topLeft())
+                    label.show()
+                    occupied += QRegion(candidate)
+                    break
 
     def fit(self):
         if not self._model:return
@@ -321,7 +348,7 @@ class TrussView(QGraphicsView):
             mapped = self.mapFromScene(rect).boundingRect()
             width, height = self.viewport().width(), self.viewport().height()
             factor = min(1, max(1, width - 120) / max(1, mapped.width()),
-                         max(1, height - 140) / max(1, mapped.height()))
+                         max(1, height - 184) / max(1, mapped.height()))
             self.scale(factor, factor)
             self.centerOn(rect.center())
         self._place_force_labels()
@@ -409,6 +436,11 @@ class TrussView(QGraphicsView):
         super().resizeEvent(e)
         if not self._fit_pending:self.fit()
         elif hasattr(self, '_force_items'):
+            self._place_force_labels()
+
+    def scrollContentsBy(self, dx, dy):
+        super().scrollContentsBy(dx, dy)
+        if getattr(self, '_force_items', None) and self.show_load_values:
             self._place_force_labels()
 
     def selected_ids(self):
