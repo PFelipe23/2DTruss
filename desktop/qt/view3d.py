@@ -23,6 +23,7 @@ from desktop.preview3d import Camera, camera_projection, color_key,palette_keys
 from desktop.section_mesh import load_shape_catalog,make_model_meshes,make_section_layout,export_obj,display_scaled_vertices
 from desktop.bridge import CATALOG
 from poe_truss.model import GROUPS
+from .action_icons import action_icon
 from .profile_picker import ProfilePicker
 
 DEFAULT={
@@ -137,11 +138,11 @@ class Truss3DView(QWidget):
         self.preset=QComboBox();self.preset.addItems(['Isométrica','Frontal XY','Perfil lateral','Superior'])
         self.preset.currentTextChanged.connect(self.set_preset)
         heading.addWidget(QLabel('Vista'));heading.addWidget(self.preset)
-        exporter=QPushButton('Exportar OBJ');exporter.clicked.connect(self.save_obj)
+        exporter=QPushButton(action_icon('export'), 'Exportar OBJ');exporter.clicked.connect(self.save_obj)
         exporter.setToolTip('Exporta os perfis extrudados em mm para auditoria geométrica externa')
         heading.addWidget(exporter)
         heading.addStretch()
-        controls_button = QPushButton('Painel 3D')
+        controls_button = QPushButton(action_icon('panel'), 'Painel 3D')
         controls_button.clicked.connect(lambda: self._app._show_inspector(self.controls))
         heading.addWidget(controls_button)
         root.addLayout(heading)
@@ -164,7 +165,7 @@ class Truss3DView(QWidget):
         self.mode.currentIndexChanged.connect(self.reset_keys)
         f.addRow('Cores por',self.mode)
         self.category=QComboBox();f.addRow('Categoria',self.category)
-        change_color=QPushButton('Escolher cor');change_color.clicked.connect(self.choose_color)
+        change_color=QPushButton(action_icon('color'), 'Escolher cor');change_color.clicked.connect(self.choose_color)
         f.addRow(change_color)
         self.show_nodes=QCheckBox('Mostrar nós');self.show_nodes.setChecked(False)
         self.show_nodes.toggled.connect(self.redraw);f.addRow(self.show_nodes)

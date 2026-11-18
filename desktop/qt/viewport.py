@@ -140,9 +140,9 @@ class TrussView(QGraphicsView):
         self.coordinates_changed.emit(point.x(), -point.y() / self._vertical)
         super().mouseMoveEvent(event)
 
-    def _add_text(self,text,pos,size=11,color=NAVY,rotation=0,bold=False):
+    def _add_text(self,text,pos,color=NAVY,rotation=0,bold=False):
         item=QGraphicsSimpleTextItem(str(text))
-        f=QFont('Segoe UI',size)
+        f=QFont('Segoe UI',9)
         f.setBold(bold)
         item.setFont(f);item.setBrush(QBrush(QColor(color)))
         item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations,True)
@@ -179,19 +179,19 @@ class TrussView(QGraphicsView):
                 if length<1:continue
                 mid=QPointF((a.x()+b.x())/2,(a.y()+b.y())/2)
                 shift=QPointF(-dy/length*80,dx/length*80)
-                self._add_text(f'{axial/1000:+.2f}',mid+shift,10,TENS if axial>0 else COMP,ang,True)
+                self._add_text(f'{axial/1000:+.2f}',mid+shift,TENS if axial>0 else COMP,ang,True)
         for n in model.nodes:
             item=NodeItem(n.id,n.x,n.y*self._vertical)
             scene.addItem(item);self._nodes[n.id]=item
             if self.show_ids:
-                self._add_text(n.id,self._pos[n.id]+QPointF(22,-85),9,'#526A7D')
+                self._add_text(n.id,self._pos[n.id]+QPointF(22,-85),'#526A7D')
         for node in session.project.get('cad_drafts',[]):
             item=NodeItem(node['id'],node['x_mm'],node['y_mm']*self._vertical,draft=True)
             scene.addItem(item);self._drafts[node['id']]=item
         for nid,(ux,uy) in model.supports.items():
             p=self._pos[nid]
             sign=('XY' if ux and uy else 'Y' if uy else 'X' if ux else '')
-            if sign:self._add_text('△ '+sign,p+QPointF(-80,70),10,'#62788A',bold=True)
+            if sign:self._add_text('△ '+sign,p+QPointF(-80,70),'#62788A',bold=True)
         if self.show_forces:
             loads=(self._analysis or {}).get('loads')
             if loads is None and analysis_id:loads=session.forces_for_case(analysis_id)
@@ -210,7 +210,7 @@ class TrussView(QGraphicsView):
                 for sign in (-1,1):
                     pt=end-v*.12+side*sign*45
                     tick=QGraphicsLineItem(end.x(),end.y(),pt.x(),pt.y());tick.setPen(QPen(QColor('#DC8E2F'),2));scene.addItem(tick)
-                self._add_text(f'{f/10:.2f} kgf',end+QPointF(40,-40),10,'#A26117')
+                self._add_text(f'{f/10:.2f} kgf',end+QPointF(40,-40),'#A26117')
         if self.show_deformed and self._analysis:
             u=self._analysis['nodal_displacements']
             maxu=max((hypot(v['ux_mm'],v['uy_mm']) for v in u.values()),default=0.)
@@ -220,7 +220,7 @@ class TrussView(QGraphicsView):
                 a,b=deformed[m.i],deformed[m.j]
                 line=QGraphicsLineItem(a.x(),a.y(),b.x(),b.y())
                 pen=QPen(QColor('#16A38C'),1.5,Qt.PenStyle.DashLine);line.setPen(pen);line.setZValue(4);scene.addItem(line)
-            self._add_text(f'Deformada amplificada ×{amp:.1f}',QPointF(min(n.x for n in model.nodes),-max(n.y for n in model.nodes)*self._vertical-400),10,'#087C69')
+            self._add_text(f'Deformada amplificada ×{amp:.1f}',QPointF(min(n.x for n in model.nodes),-max(n.y for n in model.nodes)*self._vertical-400),'#087C69')
         scene.blockSignals(False)
         with QSignalBlocker(scene):
             for kind, identifier in selection:

@@ -17,6 +17,7 @@
 - Preservar informação de procedência e qualidade das propriedades geométricas.
 
 ## Entrega
+- Para mudanças de GUI, entregar uma prévia da interface para revisão. Gerar o executável Windows após a aprovação da prévia.
 - Branches `feat/...`, `fix/...`, `test/...`, `docs/...`.
 - CI verde e testes reproduzíveis; atualizar documentação de novas funcionalidades.
 - Não adicionar arquivos proprietários de normas ou conteúdo protegido.

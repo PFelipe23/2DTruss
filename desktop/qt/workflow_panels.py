@@ -16,6 +16,7 @@ from desktop import workflow
 from poe_truss.model import GROUPS,geometry_diagnostics
 from poe_truss.materials import STEEL_GRADES
 from poe_truss.search import suggest_geometry
+from .action_icons import action_icon
 from .profile_picker import ProfilePicker
 
 
@@ -24,10 +25,10 @@ def field(value=0,low=0,high=1e8,dec=2,step=1):
     return f
 
 
-def row_buttons(*pairs):
+def row_buttons(*commands):
     w=QWidget();h=QHBoxLayout(w);h.setContentsMargins(0,0,0,0)
-    for label,callback in pairs:
-        b=QPushButton(label);b.clicked.connect(callback);h.addWidget(b)
+    for label,callback,icon in commands:
+        b=QPushButton(action_icon(icon), label);b.clicked.connect(callback);h.addWidget(b)
     return w
 
 class WorkflowMixin:
@@ -74,7 +75,7 @@ class WorkflowMixin:
         f.addRow('Passo máximo das terças (m)',self.purlin_step)
         f.addRow('Diagonal mínima (°)',self.angle_min)
         f.addRow('Diagonal máxima (°)',self.angle_max)
-        f.addRow(row_buttons(('Aplicar critérios',self._apply_modulation)))
+        f.addRow(row_buttons(('Aplicar critérios',self._apply_modulation,'check')))
         v.addWidget(box)
         roof=QGroupBox('Telha e terças · dados informados pelo projetista')
         rf=QFormLayout(roof)
@@ -82,7 +83,7 @@ class WorkflowMixin:
         self.roof_mass=field(8,0,200,2,1)
         rf.addRow('Fabricante',self.roof_vendor);rf.addRow('Modelo',self.roof_model)
         rf.addRow('Massa da telha (kg/m²)',self.roof_mass)
-        rf.addRow(row_buttons(('Registrar telha + ação G2',self._apply_roof)))
+        rf.addRow(row_buttons(('Registrar telha + ação G2',self._apply_roof,'check')))
         v.addWidget(roof)
         v.addStretch(1)
         self.profile_tab=tab;self._add_inspector_page(tab,'Perfis')
@@ -173,9 +174,9 @@ class WorkflowMixin:
             ('Intensidade',self.action_value),('Unidade força',self.action_force_unit),
             ('Aplicação',self.action_application),('Base geométrica',self.action_basis),
             ('Direção',self.action_direction),('Região',self.action_zone)]:f.addRow(label,widget)
-        f.addRow(row_buttons(('Adicionar',self._new_action_case),('Aplicar',self._apply_action_case),
-                              ('Excluir',self._delete_action_case)))
-        f.addRow(row_buttons(('Mostrar forças nodais resultantes',self._audit_selected_case)))
+        f.addRow(row_buttons(('Adicionar',self._new_action_case,'add'),('Aplicar',self._apply_action_case,'check'),
+                              ('Excluir',self._delete_action_case,'delete')))
+        f.addRow(row_buttons(('Mostrar forças nodais resultantes',self._audit_selected_case,'table')))
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
@@ -256,8 +257,9 @@ class WorkflowMixin:
         self.factor_table.setHorizontalHeaderLabels(['Caso','Fator'])
         self.factor_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         v.addWidget(self.factor_table,1)
-        v.addWidget(row_buttons(('Nova combinação',self._new_combination),('Aplicar fatores',self._apply_combination),
-                                ('Excluir',self._delete_combination)))
+        v.addWidget(row_buttons(('Nova combinação',self._new_combination,'add'),
+                                ('Aplicar fatores',self._apply_combination,'check'),
+                                ('Excluir',self._delete_combination,'delete')))
         self.combo_tab=tab;self._add_inspector_page(tab,'Combinações')
 
     def _populate_combination(self,*_):
@@ -313,7 +315,7 @@ class WorkflowMixin:
             ('L torsional (mm; 0=pendente)',self.stab_torsion),('Eixo no plano',self.stab_axis_in),
             ('Eixo lateral',self.stab_axis_out),('Rotação (°)',self.stab_rot),
             ('Referência do travamento',self.stab_ref)]:f.addRow(label,widget)
-        f.addRow(row_buttons(('Aplicar hipóteses',self._apply_stability)))
+        f.addRow(row_buttons(('Aplicar hipóteses',self._apply_stability,'check')))
         v.addWidget(b)
         self.stability_status=QLabel('Sem dimensionamento resistente.');self.stability_status.setWordWrap(True)
         v.addWidget(self.stability_status);v.addStretch(1)
@@ -345,7 +347,7 @@ class WorkflowMixin:
         p=QGroupBox('Parâmetros da pesquisa');f=QFormLayout(p)
         self.search_case=QComboBox();f.addRow('Combinação/caso',self.search_case)
         self.search_flecha=field(250,50,2000,0,50);f.addRow('Limite L /',self.search_flecha)
-        self.search_button=QPushButton('Pesquisar alternativas')
+        self.search_button=QPushButton(action_icon('compare'), 'Pesquisar alternativas')
         self.search_button.clicked.connect(self._start_search);f.addRow(self.search_button);v.addWidget(p)
         self.search_table=QTableWidget(0,5)
         self.search_table.setHorizontalHeaderLabels(['Painéis','Altura m','Massa kg','Flecha mm','Status'])
@@ -353,8 +355,8 @@ class WorkflowMixin:
         self.search_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         v.addWidget(self.search_table,1)
         self.search_candidates=[]
-        v.addWidget(row_buttons(('Adotar selecionada',self._adopt_search),
-                                 ('Aplicar valores manuais',self._apply_manual)))
+        v.addWidget(row_buttons(('Adotar selecionada',self._adopt_search,'check'),
+                                 ('Aplicar valores manuais',self._apply_manual,'check')))
         self.search_note=QLabel('Não altera parâmetros manuais fora das sugestões.');v.addWidget(self.search_note)
         self.search_tab=tab;self._add_inspector_page(tab,'Alternativas')
 
@@ -406,8 +408,8 @@ class WorkflowMixin:
         self.diag_tree.header().setSectionResizeMode(1,QHeaderView.ResizeMode.Stretch)
         self.diag_tree.itemDoubleClicked.connect(self._locate_diagnostic)
         v.addWidget(self.diag_tree,1)
-        v.addWidget(row_buttons(('Atualizar diagnóstico',self._populate_diagnostics),
-                                 ('Calcular e conferir',self.calculate)))
+        v.addWidget(row_buttons(('Atualizar diagnóstico',self._populate_diagnostics,'diagnostic'),
+                                 ('Calcular e conferir',self.calculate,'run')))
         v.addWidget(QLabel('Verificações de ELU, contraventamento e ligações seguem pendentes.'))
         self.diagnostics_tab=tab;self._add_inspector_page(tab,'Diagnóstico')
 
