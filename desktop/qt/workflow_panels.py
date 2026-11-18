@@ -71,7 +71,7 @@ class WorkflowMixin:
         v.addWidget(roof)
         self.section_details=QLabel();self.section_details.setWordWrap(True);v.addWidget(self.section_details)
         v.addStretch(1)
-        self.profile_tab=tab;self.info_tabs.addTab(tab,'Perfis')
+        self.profile_tab=tab;self._add_inspector_page(tab,'Perfis')
 
     def _populate_section(self,*_):
         g=self.section_group.currentText() if hasattr(self,'section_group') else ''
@@ -133,7 +133,7 @@ class WorkflowMixin:
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
-        v.addStretch(1);self.actions_tab=tab;self.info_tabs.addTab(tab,'Ações gerais')
+        v.addStretch(1);self.actions_tab=tab;self._add_inspector_page(tab,'Ações gerais')
 
     def _case_controls(self,*_):
         kind=self.action_kind.currentText();general=kind in ('surface','line')
@@ -212,7 +212,7 @@ class WorkflowMixin:
         v.addWidget(self.factor_table,1)
         v.addWidget(row_buttons(('Nova combinação',self._new_combination),('Aplicar fatores',self._apply_combination),
                                 ('Excluir',self._delete_combination)))
-        self.combo_tab=tab;self.info_tabs.addTab(tab,'Combinações')
+        self.combo_tab=tab;self._add_inspector_page(tab,'Combinações')
 
     def _populate_combination(self,*_):
         cid=self.combination.currentText()
@@ -271,7 +271,7 @@ class WorkflowMixin:
         v.addWidget(b)
         self.stability_status=QLabel('Sem dimensionamento resistente.');self.stability_status.setWordWrap(True)
         v.addWidget(self.stability_status);v.addStretch(1)
-        self.stability_tab=tab;self.info_tabs.addTab(tab,'Estabilidade')
+        self.stability_tab=tab;self._add_inspector_page(tab,'Estabilidade')
 
     def _populate_stability(self,*_):
         spec=self.session.project.get('stability',{}).get('groups',{}).get(self.stab_group.currentText(),{})
@@ -310,7 +310,7 @@ class WorkflowMixin:
         v.addWidget(row_buttons(('Adotar selecionada',self._adopt_search),
                                  ('Aplicar valores manuais',self._apply_manual)))
         self.search_note=QLabel('Não altera parâmetros manuais fora das sugestões.');v.addWidget(self.search_note)
-        self.search_tab=tab;self.info_tabs.addTab(tab,'Alternativas')
+        self.search_tab=tab;self._add_inspector_page(tab,'Alternativas')
 
     def _start_search(self):
         if 'model_override' in self.session.project:
@@ -363,7 +363,7 @@ class WorkflowMixin:
         v.addWidget(row_buttons(('Atualizar diagnóstico',self._populate_diagnostics),
                                  ('Calcular e conferir',self.calculate)))
         v.addWidget(QLabel('Verificações de ELU, contraventamento e ligações seguem pendentes.'))
-        self.diagnostics_tab=tab;self.info_tabs.addTab(tab,'Diagnóstico')
+        self.diagnostics_tab=tab;self._add_inspector_page(tab,'Diagnóstico')
 
     def _populate_diagnostics(self):
         issues=workflow.project_diagnostics(self.session.project,self.session.model,self.session.result)

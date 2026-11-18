@@ -11,6 +11,49 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_workspace_selection_results_and_drawing_only(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            member = window.session.model.members[0]
+            key = ('member', member.id)
+            window._model_items[key].setSelected(True)
+            self.assertEqual(window.view.selected_ids(), [key])
+            self.assertTrue(window.member_properties.isVisible())
+            self.assertFalse(window.node_properties.isVisible())
+
+            window.calculate()
+            self.assertTrue(window.results_panel.isVisible())
+            self.assertGreater(window.quick_table.rowCount(), 0)
+            self.assertEqual(window.view.selected_ids(), [key])
+            window.quick_select_member(0, 0)
+            first_result = ('member', window.quick_table.item(0, 0).text())
+            self.assertEqual(window.view.selected_ids(), [first_result])
+            self.assertTrue(window._model_items[first_result].isSelected())
+
+            QTest.mouseClick(window.focus_button, Qt.MouseButton.LeftButton)
+            self.assertFalse(window.navigator.isVisible())
+            self.assertFalse(window.results_panel.isVisible())
+            QTest.mouseClick(window.focus_button, Qt.MouseButton.LeftButton)
+            self.assertTrue(window.navigator.isVisible())
+            self.assertTrue(window.results_panel.isVisible())
+
+            QTest.mouseClick(window.grid, Qt.MouseButton.LeftButton)
+            self.assertFalse(window.view.grid_visible)
+            self.assertTrue(window.view.snap_enabled)
+            self.assertTrue(window._apply(window.session.project))
+            self.assertEqual(window.quick_table.rowCount(), 0)
+        finally:
+            window._dirty = False
+            window.close()
+
     def test_window_tasks_and_3d_real_section(self):
         os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
         from PySide6.QtWidgets import QApplication

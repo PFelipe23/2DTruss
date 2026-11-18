@@ -9,13 +9,14 @@ from pathlib import Path
 import json
 import sys
 
-from PySide6.QtCore import Qt,QSignalBlocker,QTimer
+from PySide6.QtCore import Qt,QSignalBlocker,QSize,QTimer
 from PySide6.QtGui import QAction,QKeySequence,QColor,QFont,QPen
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,
     QLabel,QPushButton,QToolButton,QComboBox,QDoubleSpinBox,QSpinBox,QCheckBox,QSplitter,
     QTreeWidget,QTreeWidgetItem,QTabWidget,QFormLayout,QGroupBox,QLineEdit,QFileDialog,
     QMessageBox,QInputDialog,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,
-    QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QGraphicsLineItem,QFrame,QSizePolicy,QStyle)
+    QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QGraphicsLineItem,QFrame,QSizePolicy,QStyle,
+    QButtonGroup,QScrollArea)
 
 from desktop.bridge import Session,load_project,write_project
 from desktop import editing,cad_io
@@ -24,17 +25,19 @@ from poe_truss.version import APP_NAME, TAG
 from .viewport import TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DDialog
-from .ui_theme import STYLE
+from .ui_theme import STYLE,workspace_palette
 
-APP_TITLE=f'{APP_NAME}  |  {TAG}  ·  Engenharia 2D + Inspeção 3D'
+APP_TITLE=f'{APP_NAME} {TAG}'
 STYLESHEET=STYLE
 
 
-def _button(label,callback,tooltip=''):
-    w=QToolButton();w.setText(label);w.setToolTip(tooltip or label)
-    w.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-    w.setMinimumWidth(90);w.clicked.connect(callback)
-    return w
+def _button(label, callback, *, checkable=False):
+    button = QToolButton()
+    button.setText(label)
+    button.setToolTip(label)
+    button.setCheckable(checkable)
+    button.clicked.connect(callback)
+    return button
 
 
 def _spin(value,minimum,maximum,decimals=2,step=1):
@@ -100,118 +103,293 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._selected=[];self.case_id=None
         self._view3d=None
         self.setWindowTitle(APP_TITLE)
-        self.resize(1600,930);self.setMinimumSize(1100,680)
+        self.resize(1320, 700)
+        self.setMinimumSize(1000, 560)
+        self.setPalette(workspace_palette())
         self.setStyleSheet(STYLESHEET)
         self._build()
         self.refresh(fit=True)
         self._shortcuts()
 
+
     def _build(self):
-        central=QWidget();self.setCentralWidget(central)
-        main=QVBoxLayout(central);main.setContentsMargins(0,0,0,0);main.setSpacing(0)
-        header=QLabel('2DTRUSS     v0.1   |   EDITOR PARAMÉTRICO E CAD 2D')
-        header.setObjectName('appHeader');main.addWidget(header)
-        self.ribbon=QTabWidget();self.ribbon.setFixedHeight(139)
-        main.addWidget(self.ribbon)
-        for title,items in [
-          ('Arquivo',[('Novo',self.new),('Abrir JSON',self.open),('Salvar',self.save),('Importar DXF/DWG',self.import_cad),('Desfazer',self.undo),('Refazer',self.redo)]),
-          ('Modelagem',[('Selecionar',lambda:self.choose_tool('select')),('Mover',lambda:self.choose_tool('move')),('Novo nó',lambda:self.choose_tool('node')),('Criar barra',lambda:self.choose_tool('bar')),('Subdividir',lambda:self.choose_tool('split')),('Excluir',self.delete_selected),('Grupo da barra',self.change_group),('Perfis',lambda:self.info_tabs.setCurrentWidget(self.profile_tab))]),
-          ('Ações',[('Adicionar carga',self.add_load),('Novo caso nodal',self.add_case),('Apoios X/Y',lambda:self.info_tabs.setCurrentIndex(1)),('Ver cargas',self.toggle_loads),('Ações gerais',lambda:self.info_tabs.setCurrentWidget(self.actions_tab)),('Combinações',lambda:self.info_tabs.setCurrentWidget(self.combo_tab))]),
-          ('Análise',[('Calcular (F5)',self.calculate),('Resultados',lambda:self.info_tabs.setCurrentIndex(3)),('DimPerfil CSV',self.export_csv),('Memorial A3',self.export_memorial),('Alternativas',lambda:self.info_tabs.setCurrentWidget(self.search_tab)),('Diagnóstico',lambda:self.info_tabs.setCurrentWidget(self.diagnostics_tab))]),
-          ('Exibição',[('Enquadrar',self.fit),('IDs dos nós',self.toggle_ids),('Esforços',self.toggle_efforts),('Deformada',self.toggle_deformed),('Forças',self.toggle_loads),('Exagero vertical',self.change_vertical),('Vista 3D',self.open_3d)]),
-        ]:
-            content=QWidget();line=QHBoxLayout(content);line.setContentsMargins(8,2,8,0);line.setSpacing(0)
-            # Grupos pequenos no ribbon, com legenda de função.
-            group_def=[('Projeto',items[:3]),('Ferramentas',items[3:6]),('Opções',items[6:])]
-            for caption,entries in group_def:
-                if not entries:continue
-                group=QFrame();group.setObjectName('ribbonGroup')
-                gv=QVBoxLayout(group);gv.setContentsMargins(5,0,8,0);gv.setSpacing(0)
-                tools=QHBoxLayout();tools.setSpacing(1)
-                for label,action in entries:
-                    button=_button(label,action)
-                    icon_name = ('SP_DialogOpenButton' if 'Abrir' in label or 'Importar' in label else
-                                 'SP_DialogSaveButton' if 'Salvar' in label else
-                                 'SP_MediaPlay' if 'Calcular' in label else
-                                 'SP_DialogApplyButton' if 'Aplicar' in label else
-                                 'SP_FileIcon')
-                    button.setIcon(self.style().standardIcon(getattr(QStyle.StandardPixmap,icon_name)))
-                    tools.addWidget(button)
-                gv.addLayout(tools)
-                cap=QLabel(caption.upper());cap.setObjectName('ribbonCaption')
-                cap.setAlignment(Qt.AlignmentFlag.AlignCenter);gv.addWidget(cap)
-                line.addWidget(group)
-            line.addStretch(1);self.ribbon.addTab(content,title)
-        self.splitter=QSplitter(Qt.Orientation.Horizontal)
-        main.addWidget(self.splitter,1)
-        model_host=QWidget();ml=QVBoxLayout(model_host);ml.setContentsMargins(7,8,7,7);ml.setSpacing(6)
-        tree_label=QLabel('NAVEGADOR DO MODELO');tree_label.setObjectName('panelHeading')
-        ml.addWidget(tree_label)
-        self.model_filter=QLineEdit();self.model_filter.setPlaceholderText('Buscar nó ou barra...')
+        central = QWidget()
+        self.setCentralWidget(central)
+        main = QVBoxLayout(central)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
+
+        self.tool_buttons = QButtonGroup(self)
+        self._cad_buttons = {}
+        self._overlay_buttons = {}
+        self._drawing_only = False
+        self._build_ribbon(main)
+
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(5)
+        main.addWidget(self.splitter, 1)
+
+        self.navigator = QTabWidget()
+        self.navigator.setObjectName('navigator')
+        self.navigator.setDocumentMode(True)
+        self.navigator.setMinimumWidth(176)
+        model = QWidget()
+        model_layout = QVBoxLayout(model)
+        model_layout.setContentsMargins(9, 10, 9, 9)
+        self.model_filter = QLineEdit()
+        self.model_filter.setPlaceholderText('Filtrar por ID ou grupo')
+        self.model_filter.setAccessibleName('Filtrar nós e barras')
+        self.model_filter.setClearButtonEnabled(True)
         self.model_filter.textChanged.connect(self.filter_model_tree)
-        ml.addWidget(self.model_filter)
-        self.tree=QTreeWidget();self.tree.setHeaderHidden(True);self.tree.setMinimumWidth(145)
+        model_layout.addWidget(self.model_filter)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderHidden(True)
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.itemSelectionChanged.connect(self.on_tree_select)
-        ml.addWidget(self.tree,1)
-        self.splitter.addWidget(model_host)
-        center=QWidget();centcol=QVBoxLayout(center);centcol.setContentsMargins(0,0,0,0);centcol.setSpacing(0)
-        bar=QFrame();bar.setObjectName('viewportBar')
-        strip=QHBoxLayout(bar);strip.setContentsMargins(12,6,9,6);strip.setSpacing(10)
-        strip.addWidget(QLabel('PLANO XY   /   CASO'))
-        self.cases=QComboBox();self.cases.setMinimumWidth(200)
+        model_layout.addWidget(self.tree, 1)
+        self.navigator.addTab(model, 'Modelo')
+        self.task_tree = QTreeWidget()
+        self.task_tree.setHeaderHidden(True)
+        self.task_tree.itemClicked.connect(self.task_clicked)
+        self.navigator.addTab(self.task_tree, 'Tarefas')
+        self.splitter.addWidget(self.navigator)
+
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        self.view = TrussView()
+        bar = QFrame()
+        bar.setObjectName('viewportBar')
+        strip = QHBoxLayout(bar)
+        strip.setContentsMargins(8, 4, 8, 4)
+        strip.setSpacing(4)
+        for label, command in [('Selecionar', 'select'), ('Mover', 'move'), ('Pan', 'pan'), ('Enquadrar', self.fit)]:
+            strip.addWidget(self._workspace_button(label, command))
+        strip.addStretch()
+        self.cases = QComboBox()
+        self.cases.setAccessibleName('Caso ou combinação exibida')
+        self.cases.setMinimumContentsLength(8)
+        self.cases.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.cases.currentTextChanged.connect(self.on_case)
-        strip.addWidget(self.cases);strip.addStretch()
-        self.snap=QCheckBox('Snap 50 mm');self.snap.setChecked(True)
-        self.snap.toggled.connect(lambda checked:setattr(self.view,'snap_enabled',checked))
-        strip.addWidget(self.snap)
-        self.calc_badge=QLabel('NÃO CALCULADO');self.calc_badge.setObjectName('calcPending')
-        strip.addWidget(self.calc_badge)
-        centcol.addWidget(bar)
-        self.center_split=QSplitter(Qt.Orientation.Vertical)
-        centcol.addWidget(self.center_split,1)
-        self.view=TrussView();self.center_split.addWidget(self.view)
-        self.bottom_tabs=QTabWidget();self.bottom_tabs.setObjectName('bottomDock')
-        self.quick_table=QTableWidget(0,4)
-        self.quick_table.setHorizontalHeaderLabels(['Barra','Família / Grupo','N (kN)','Seção'])
+        strip.addWidget(QLabel('Caso'))
+        strip.addWidget(self.cases)
+        self.results_button = _button('Resultados', self._set_results_visible, checkable=True)
+        strip.addWidget(self.results_button)
+        center_layout.addWidget(bar)
+
+        self.center_split = QSplitter(Qt.Orientation.Vertical)
+        self.center_split.setChildrenCollapsible(False)
+        self.center_split.addWidget(self.view)
+        center_layout.addWidget(self.center_split, 1)
+        self.results_panel = QWidget()
+        result_layout = QVBoxLayout(self.results_panel)
+        result_layout.setContentsMargins(7, 5, 7, 6)
+        result_layout.setSpacing(4)
+        result_header = QHBoxLayout()
+        self.dock_info = QLabel()
+        result_header.addWidget(self.dock_info, 1)
+        result_header.addWidget(_button('Detalhar', lambda: self.info_tabs.setCurrentIndex(3)))
+        result_layout.addLayout(result_header)
+        self.quick_table = QTableWidget(0, 4)
+        self.quick_table.setHorizontalHeaderLabels(['Barra', 'Grupo', 'N (kN)', 'Seção'])
+        self.quick_table.setAlternatingRowColors(True)
+        self.quick_table.verticalHeader().hide()
+        self.quick_table.verticalHeader().setDefaultSectionSize(24)
         self.quick_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.quick_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.quick_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.ResizeToContents)
-        self.quick_table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.ResizeToContents)
-        self.quick_table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
-        self.quick_table.horizontalHeader().setSectionResizeMode(3,QHeaderView.ResizeMode.Stretch)
+        for column in range(3):
+            self.quick_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        self.quick_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.quick_table.cellClicked.connect(self.quick_select_member)
-        self.bottom_tabs.addTab(self.quick_table,'Forças nas barras')
-        self.dock_info=QLabel('F5 — calcular para carregar os resultados. Os dados anteriores não são exibidos após edição.')
-        self.dock_info.setWordWrap(True);self.dock_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.bottom_tabs.addTab(self.dock_info,'Estado da análise')
-        self.center_split.addWidget(self.bottom_tabs)
-        self.center_split.setSizes([560,175]);self.center_split.setStretchFactor(0,1)
+        result_layout.addWidget(self.quick_table, 1)
+        self.center_split.addWidget(self.results_panel)
+        self.center_split.setStretchFactor(0, 1)
+        self._set_results_visible(False)
         self.view.selected.connect(self.on_scene_selected)
         self.view.add_node.connect(self.create_node)
         self.view.add_member.connect(self.create_member)
         self.view.split_member.connect(self.split_member)
         self.view.moved.connect(self.move_nodes)
-        self.view.status_text.connect(self.status)
         self.splitter.addWidget(center)
-        self.task_host=QWidget();self.task_host.setObjectName('taskPanel')
-        task_layout=QVBoxLayout(self.task_host);task_layout.setContentsMargins(8,8,8,8);task_layout.setSpacing(6)
-        task_title=QLabel('TAREFAS E PROPRIEDADES');task_title.setObjectName('panelHeading')
-        task_layout.addWidget(task_title)
-        self.task_tree=QTreeWidget();self.task_tree.setHeaderHidden(True)
-        self.task_tree.setMaximumHeight(176)
-        self.task_tree.itemClicked.connect(self.task_clicked)
-        task_layout.addWidget(self.task_tree)
-        self.info_tabs=QTabWidget();self.info_tabs.setMinimumWidth(340)
+
+        self.task_host = QWidget()
+        self.task_host.setObjectName('taskPanel')
+        self.task_host.setMinimumWidth(300)
+        inspector = QVBoxLayout(self.task_host)
+        inspector.setContentsMargins(8, 8, 8, 6)
+        inspector.setSpacing(4)
+        self.inspector_title = QLabel('Geometria')
+        self.inspector_title.setObjectName('panelHeading')
+        inspector.addWidget(self.inspector_title)
+        self.info_tabs = QTabWidget()
         self.info_tabs.tabBar().hide()
+        self._inspector_pages = {}
         self.info_tabs.currentChanged.connect(self.update_task_selection)
-        task_layout.addWidget(self.info_tabs,1)
+        inspector.addWidget(self.info_tabs, 1)
         self.splitter.addWidget(self.task_host)
-        self.splitter.setSizes([230,895,445]);self.splitter.setStretchFactor(1,1)
-        self._build_model_tab();self._build_property_tab();self._build_loads_tab();self._build_results_tab()
+        self.splitter.setSizes([208, 850, 352])
+        self.splitter.setStretchFactor(1, 1)
+        self._build_model_tab()
+        self._build_property_tab()
+        self._build_loads_tab()
+        self._build_results_tab()
         self._build_engineering_tabs()
         self.setup_task_tree()
-        self.status_label=QLabel('Pronto · Análise 2D · ELU normativo não verificado')
-        self.status_label.setObjectName('status');main.addWidget(self.status_label)
+
+        footer = QFrame()
+        footer.setObjectName('statusBar')
+        status = QHBoxLayout(footer)
+        status.setContentsMargins(9, 3, 9, 3)
+        status.setSpacing(8)
+        self.status_label = QLabel()
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        status.addWidget(self.status_label, 1)
+        self.coordinates = QLabel('X —    Y —    mm')
+        self.coordinates.setObjectName('coordinates')
+        self.coordinates.setMinimumWidth(226)
+        self.view.coordinates_changed.connect(self._show_coordinates)
+        self.view.status_text.connect(self.status)
+        status.addWidget(self.coordinates)
+        self.snap = _button('Snap 50 mm', self._set_snap, checkable=True)
+        self.snap.setChecked(self.view.snap_enabled)
+        status.addWidget(self.snap)
+        self.grid = _button('Grade', self.view.set_grid_visible, checkable=True)
+        self.grid.setChecked(self.view.grid_visible)
+        status.addWidget(self.grid)
+        self.calc_badge = QLabel('Não calculado')
+        self.calc_badge.setObjectName('calcPending')
+        status.addWidget(self.calc_badge)
+        main.addWidget(footer)
+
+    def _build_ribbon(self, main):
+        quick = QFrame()
+        quick.setObjectName('quickAccess')
+        line = QHBoxLayout(quick)
+        line.setContentsMargins(10, 4, 10, 4)
+        line.setSpacing(4)
+        brand = QLabel(APP_TITLE)
+        brand.setObjectName('appHeader')
+        line.addWidget(brand)
+        for label, command, icon in [
+            ('Novo', self.new, QStyle.StandardPixmap.SP_FileIcon),
+            ('Abrir', self.open, QStyle.StandardPixmap.SP_DialogOpenButton),
+            ('Salvar', self.save, QStyle.StandardPixmap.SP_DialogSaveButton),
+        ]:
+            button = _button(label, command)
+            button.setIcon(self.style().standardIcon(icon))
+            button.setIconSize(QSize(14, 14))
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            line.addWidget(button)
+        line.addStretch()
+        self.focus_button = _button('Só desenho', self._set_drawing_only, checkable=True)
+        self.focus_button.setToolTip('Recolher ou restaurar os painéis (Ctrl+0)')
+        line.addWidget(self.focus_button)
+        line.addWidget(_button('Vista 3D', self.open_3d))
+        run = _button('Calcular', self.calculate)
+        run.setObjectName('calculateButton')
+        run.setToolTip('Calcular o modelo (F5)')
+        line.addWidget(run)
+        main.addWidget(quick)
+
+        self.ribbon = QTabWidget()
+        self.ribbon.setObjectName('ribbon')
+        self.ribbon.setDocumentMode(True)
+        main.addWidget(self.ribbon)
+        for tab, groups in [
+            ('Arquivo', [('Projeto', [('Novo', self.new), ('Abrir JSON', self.open), ('Salvar', self.save)]),
+                         ('Importação', [('DXF / DWG', self.import_cad)]),
+                         ('Histórico', [('Desfazer', self.undo), ('Refazer', self.redo)])]),
+            ('Modelagem', [('Criar', [('Nó', 'node'), ('Barra', 'bar')]),
+                           ('Editar', [('Subdividir', 'split'), ('Excluir', self.delete_selected)]),
+                           ('Atribuir', [('Grupo da barra', self.change_group),
+                                         ('Perfis', lambda: self._show_inspector(self.profile_tab))])]),
+            ('Ações', [('Cargas nodais', [('Adicionar carga', self.add_load), ('Novo caso', self.add_case)]),
+                       ('Modelo', [('Apoios X/Y', lambda: self.info_tabs.setCurrentIndex(1)),
+                                   ('Ações gerais', lambda: self._show_inspector(self.actions_tab)),
+                                   ('Combinações', lambda: self._show_inspector(self.combo_tab))])]),
+            ('Análise', [('Consultar', [('Esforços', lambda: self._set_results_visible(True)),
+                                       ('Alternativas', lambda: self._show_inspector(self.search_tab)),
+                                       ('Diagnóstico', lambda: self._show_inspector(self.diagnostics_tab))]),
+                         ('Exportar', [('DimPerfil CSV', self.export_csv), ('Memorial A3', self.export_memorial)])]),
+            ('Exibição', [('Sobreposições', [('IDs dos nós', 'show_ids'), ('Esforços', 'show_efforts'),
+                                           ('Deformada', 'show_deformed'), ('Forças', 'show_forces')]),
+                          ('Vista', [('Escala vertical', self.change_vertical), ('Vista 3D', self.open_3d)])]),
+        ]:
+            page = QWidget()
+            groups_layout = QHBoxLayout(page)
+            groups_layout.setContentsMargins(7, 4, 7, 4)
+            groups_layout.setSpacing(0)
+            for title, commands in groups:
+                group = QFrame()
+                group.setObjectName('ribbonGroup')
+                group_layout = QVBoxLayout(group)
+                group_layout.setContentsMargins(7, 0, 9, 0)
+                group_layout.setSpacing(2)
+                buttons = QHBoxLayout()
+                buttons.setSpacing(3)
+                for label, command in commands:
+                    buttons.addWidget(self._workspace_button(label, command))
+                group_layout.addLayout(buttons)
+                caption = QLabel(title)
+                caption.setObjectName('ribbonCaption')
+                caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                group_layout.addWidget(caption)
+                groups_layout.addWidget(group)
+            groups_layout.addStretch(1)
+            self.ribbon.addTab(page, tab)
+        self.ribbon.setCurrentIndex(1)
+
+    def _workspace_button(self, label, command):
+        if not isinstance(command, str):
+            return _button(label, command)
+        if command.startswith('show_'):
+            button = _button(label, lambda enabled: self._set_overlay(command, enabled), checkable=True)
+            self._overlay_buttons[command] = button
+            return button
+        button = _button(label, lambda: self.choose_tool(command), checkable=True)
+        self.tool_buttons.addButton(button)
+        self._cad_buttons[command] = button
+        button.setChecked(command == 'select')
+        return button
+
+    def _add_inspector_page(self, page, title):
+        page.setObjectName('inspectorPage')
+        page.setAutoFillBackground(True)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(page)
+        self._inspector_pages[page] = scroll
+        self.info_tabs.addTab(scroll, title)
+
+    def _show_inspector(self, page):
+        self.info_tabs.setCurrentWidget(self._inspector_pages[page])
+
+    def _set_results_visible(self, visible):
+        was_hidden = self.results_panel.isHidden()
+        self.results_button.setChecked(visible)
+        self.results_panel.setVisible(visible and not self._drawing_only)
+        if was_hidden and self.results_panel.isVisible():
+            height = self.center_split.height()
+            results_height = min(215, height // 3)
+            self.center_split.setSizes([height - results_height, results_height])
+
+    def _set_drawing_only(self, enabled):
+        self._drawing_only = enabled
+        self.focus_button.setChecked(enabled)
+        for panel in (self.navigator, self.task_host, self.ribbon):
+            panel.setVisible(not enabled)
+        self.results_button.setEnabled(not enabled)
+        self.results_panel.setVisible(self.results_button.isChecked() and not enabled)
+
+    def _set_snap(self, enabled):
+        self.view.snap_enabled = enabled
+
+    def _show_coordinates(self, x, y):
+        self.coordinates.setText(f'X {x:,.1f}    Y {y:,.1f}    mm')
+
 
     def _build_model_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
@@ -234,13 +412,14 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.cad_notice.setWordWrap(True);col.addWidget(self.cad_notice)
         self.revert_button=QPushButton('Voltar ao modo paramétrico')
         self.revert_button.clicked.connect(self.revert_parametric);col.addWidget(self.revert_button)
-        col.addStretch(1);self.info_tabs.addTab(tab,'Geometria')
+        col.addStretch(1);self._add_inspector_page(tab,'Geometria')
 
     def _build_property_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
         self.selection_label=QLabel('Selecione um nó ou barra no viewport')
         self.selection_label.setWordWrap(True);col.addWidget(self.selection_label)
         g=QGroupBox('Propriedades do nó');f=QFormLayout(g)
+        self.node_properties = g
         self.node_id=QLineEdit();self.node_id.setReadOnly(True);f.addRow('ID',self.node_id)
         self.node_x=_spin(0,-1e9,1e9,2,50);self.node_y=_spin(0,-1e9,1e9,2,50)
         f.addRow('X (mm)',self.node_x);f.addRow('Y (mm)',self.node_y)
@@ -249,13 +428,14 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.apply_node=QPushButton('Aplicar posição e apoios');self.apply_node.clicked.connect(self.apply_node_properties)
         f.addRow(self.apply_node);col.addWidget(g)
         g2=QGroupBox('Propriedades das barras');ff=QFormLayout(g2)
+        self.member_properties = g2
         self.member_info=QLabel('Selecione uma barra');self.member_info.setWordWrap(True)
         ff.addRow(self.member_info)
         self.group=QComboBox();self.group.addItems(['superior','inferior','montante','diagonal'])
         ff.addRow('Grupo',self.group)
         change=QPushButton('Aplicar grupo às barras selecionadas');change.clicked.connect(self.change_group)
         ff.addRow(change);col.addWidget(g2)
-        col.addStretch(1);self.info_tabs.addTab(tab,'Propriedades')
+        col.addStretch(1);self._add_inspector_page(tab,'Propriedades')
 
     def _build_loads_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
@@ -284,7 +464,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         col.addWidget(nodal)
         self.load_note=QLabel('Forças explícitas por nó. Para ações superficiais, lineares e vento, acesse Ações gerais.');self.load_note.setWordWrap(True)
         col.addWidget(self.load_note)
-        self.info_tabs.addTab(tab,'Cargas')
+        self._add_inspector_page(tab,'Cargas')
 
     def _build_results_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
@@ -310,7 +490,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         col.addWidget(self.result_table,1)
         self.critical_detail=QLabel('Compressão azul · Tração vermelha');self.critical_detail.setWordWrap(True)
         col.addWidget(self.critical_detail)
-        self.info_tabs.addTab(tab,'Resultados')
+        self._add_inspector_page(tab,'Resultados')
 
     def open_3d(self):
         """Janela não modal: visualização tridimensional, sem solver 3D."""
@@ -335,8 +515,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         dialog.refresh_model(self.case_id)
 
     def _shortcuts(self):
-        for key,func in [('Ctrl+O',self.open),('Ctrl+S',self.save),('Ctrl+Z',self.undo),('Ctrl+Y',self.redo),
-                         ('F5',self.calculate),('Delete',self.delete_selected),('F',self.fit)]:
+        for key,func in [('Ctrl+N',self.new),('Ctrl+O',self.open),('Ctrl+S',self.save),
+                         ('Ctrl+Z',self.undo),('Ctrl+Y',self.redo),('F5',self.calculate),
+                         ('Delete',self.delete_selected),('F',self.fit),
+                         ('Esc',lambda:self.choose_tool('select')),('Ctrl+0',self.focus_button.click)]:
             action=QAction(self);action.setShortcut(QKeySequence(key));action.triggered.connect(func);self.addAction(action)
 
     def status(self,message):self.status_label.setText(str(message))
@@ -357,16 +539,21 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         try:
             model=self.session.model;project=self.session.project
             self.tree.blockSignals(True);self.tree.clear()
+            self._model_items = {}
             nodes_root=QTreeWidgetItem(['Nós']);members_root=QTreeWidgetItem(['Barras']);drafts_root=QTreeWidgetItem(['Nós em criação'])
             self.tree.addTopLevelItems([nodes_root,members_root,drafts_root])
             for n in model.nodes:
                 node=QTreeWidgetItem([n.id]);node.setData(0,Qt.ItemDataRole.UserRole,('node',n.id));nodes_root.addChild(node)
+                self._model_items['node', n.id] = node
             for m in model.members:
                 item=QTreeWidgetItem([f'{m.id} · {m.group}']);item.setData(0,Qt.ItemDataRole.UserRole,('member',m.id));members_root.addChild(item)
+                self._model_items['member', m.id] = item
             for n in project.get('cad_drafts',[]):
                 item=QTreeWidgetItem([n['id']+' (rascunho)']);item.setData(0,Qt.ItemDataRole.UserRole,('node',n['id']));drafts_root.addChild(item)
+                self._model_items['node', n['id']] = item
             nodes_root.setExpanded(False);members_root.setExpanded(False);drafts_root.setExpanded(True)
             self.tree.blockSignals(False)
+            self.filter_model_tree(self.model_filter.text())
             options=[x['id'] for x in project.get('load_cases',[])]+[x['id'] for x in project.get('combinations',[])]
             previous=self.case_id
             self.cases.blockSignals(True);self.cases.clear();self.cases.addItems(options)
@@ -389,9 +576,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             explicit='model_override' in project
             self.geometry_box.setEnabled(not explicit);self.revert_button.setEnabled(explicit)
             self.view.render(self.session,self.case_id,fit=fit)
+            self._set_canvas_selection(self._selected)
+            self._update_selection(self.view.selected_ids(), show_properties=False)
             self.view.set_tool(self.view.tool)
             self.refresh_load_table();self.refresh_result_table();self.refresh_engineering_tabs()
-            self.calc_badge.setText('CALCULADO' if self.session.result else 'NÃO CALCULADO')
+            if self.session.result:
+                self.calc_badge.setText('Calculado')
+            elif self.session.calculated_revision >= 0:
+                self.calc_badge.setText('Recalcular (F5)')
+            else:
+                self.calc_badge.setText('Não calculado')
             self.calc_badge.setObjectName('calcReady' if self.session.result else 'calcPending')
             self.calc_badge.style().unpolish(self.calc_badge);self.calc_badge.style().polish(self.calc_badge)
             self.setWindowTitle(APP_TITLE+('  *' if self._dirty else '')+(f'  — {self.filepath.name}' if self.filepath else ''))
@@ -399,7 +593,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         finally:self._refreshing=False
 
     def choose_tool(self,tool):
+        self._cad_buttons[tool].setChecked(True)
         self.view.set_tool(tool)
+        self._show_selection_controls()
         if tool in ('node','bar','split','move'):self.info_tabs.setCurrentIndex(1)
 
     def on_case(self,text):
@@ -411,15 +607,39 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def on_tree_select(self):
         if self._refreshing:return
         selected=[item.data(0,Qt.ItemDataRole.UserRole) for item in self.tree.selectedItems()]
-        self._update_selection([x for x in selected if x],from_tree=True)
-
-    def on_scene_selected(self,selected):
-        if self._refreshing:return
+        selected = [entry for entry in selected if entry]
+        self._set_canvas_selection(selected)
         self._update_selection(selected)
 
-    def _update_selection(self,selected,from_tree=False):
+    def on_scene_selected(self,selected):
+        if self._refreshing or selected == self._selected:return
+        self._update_selection(selected)
+
+    def _set_canvas_selection(self, selected):
+        with QSignalBlocker(self.view.scene()):
+            self.view.scene().clearSelection()
+            for kind, identifier in selected:
+                item = self.view.selection_item(kind, identifier)
+                if item is not None:
+                    item.setSelected(True)
+
+    def _update_selection(self, selected, *, show_properties=True):
         self._selected=selected
-        if not selected:self.selection_label.setText('Selecione um nó ou barra');return
+        with QSignalBlocker(self.tree):
+            self.tree.clearSelection()
+            for key in selected:
+                item = self._model_items.get(key)
+                if item is not None:
+                    item.setSelected(True)
+            if selected and show_properties:
+                item = self._model_items.get(selected[0])
+                if item is not None and not item.isHidden() and not item.parent().isHidden():
+                    self.tree.scrollToItem(item)
+        self._show_selection_controls()
+        if not selected:
+            self.selection_label.setText('Selecione um nó ou uma barra no desenho ou na árvore.')
+            self.member_info.clear()
+            return
         kind,id=selected[0]
         if kind=='node':
             nodes={n.id:n for n in self.session.model.nodes}
@@ -430,14 +650,22 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 self.support_x.setChecked(ux);self.support_y.setChecked(uy)
                 self.load_node.setCurrentText(id)
                 self.selection_label.setText(f'Nó {id}  |  X={n.x:.2f} mm  Y={n.y:.2f} mm')
-                self.info_tabs.setCurrentIndex(1)
+                if show_properties:self.info_tabs.setCurrentIndex(1)
         else:
             m=next((m for m in self.session.model.members if m.id==id),None)
             if m:
                 self.member_info.setText(f'{m.id} · {m.i} → {m.j}\n{m.profile}\nL={self.session.model.member_length(m):.2f} mm')
                 self.group.setCurrentText(m.group)
-                self.selection_label.setText(f'{len(selected)} elemento(s) selecionado(s)')
-                self.info_tabs.setCurrentIndex(1)
+                self.selection_label.setText(f'Barra {id}' if len(selected) == 1 else
+                                             f'{len(selected)} elementos selecionados')
+                if show_properties:self.info_tabs.setCurrentIndex(1)
+
+    def _show_selection_controls(self):
+        kind = self._selected[0][0] if self._selected else None
+        self.node_properties.setVisible(kind == 'node')
+        self.member_properties.setVisible(kind == 'member' or self.view.tool == 'bar')
+        if kind != 'member':
+            self.member_info.clear()
 
     def create_node(self,x,y):
         try:p,nid=editing.add_draft(self.session.project,self.session.model,x,y)
@@ -541,7 +769,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             if idx is None:target['loads'].append(load)
             else:target['loads'][idx]=load
         except Exception as exc:QMessageBox.warning(self,'Carga nodal',str(exc));return
-        self._apply(p,'Carga nodal alterada');self.view.show_forces=True;self.view.render(self.session,self.case_id)
+        if self._apply(p,'Carga nodal alterada'):
+            self._set_overlay('show_forces', True)
 
     def remove_load(self):
         cid=self.load_case.currentText();row=self.load_table.currentRow()
@@ -566,8 +795,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.session.calculate()
         except Exception as exc:
             QMessageBox.warning(self,'Não foi possível analisar',str(exc));return
-        self.status('Análise concluída · verificar estados-limites e travamentos separadamente')
-        self.refresh();self.info_tabs.setCurrentIndex(3)
+        self.refresh()
+        self._set_results_visible(True)
+        self.status('Análise concluída · verifique estados-limites e travamentos separadamente')
 
     def refresh_result_table(self,*_):
         if not hasattr(self,'result_table'):return
@@ -575,7 +805,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if not res:
             self.result_table.setRowCount(0);self.results_info.setText('Análise desatualizada — pressione F5');self.refresh_quick_table();return
         cid=self.case_id or next(iter(res['analyses']),None)
-        if cid not in res['analyses']:return
+        if cid not in res['analyses']:
+            self.result_table.setRowCount(0)
+            self.results_info.setText('O caso selecionado não tem resultados disponíveis.')
+            self.refresh_quick_table()
+            return
         axial=res['analyses'][cid]['axial_n']
         mode=self.result_mode.currentText() if hasattr(self,'result_mode') else 'Caso atual'
         def force(mid):
@@ -601,19 +835,17 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         item=self.result_table.item(row,0)
         if not item:return
         mid=item.text()
-        self.view.scene().blockSignals(True)
-        for x in self.view.scene().selectedItems():x.setSelected(False)
-        if mid in self.view._members:self.view._members[mid].setSelected(True)
-        self.view.scene().blockSignals(False)
-        self._selected=[('member',mid)]
+        selection = [('member', mid)]
+        self._set_canvas_selection(selection)
+        self._update_selection(selection, show_properties=False)
         e=self.session.result['envelope'][mid]
         self.critical_detail.setText(f'{mid}\nTração máxima: {e["max_tension_n"]/1000:.2f} kN ({e["tension_case"]})\n'
             f'Compressão máxima: {e["max_compression_n"]/1000:.2f} kN ({e["compression_case"]})')
 
-    def toggle_ids(self):self.view.show_ids=not self.view.show_ids;self.view.render(self.session,self.case_id)
-    def toggle_efforts(self):self.view.show_efforts=not self.view.show_efforts;self.view.render(self.session,self.case_id)
-    def toggle_deformed(self):self.view.show_deformed=not self.view.show_deformed;self.view.render(self.session,self.case_id)
-    def toggle_loads(self):self.view.show_forces=not self.view.show_forces;self.view.render(self.session,self.case_id)
+    def _set_overlay(self, flag, visible):
+        setattr(self.view, flag, visible)
+        self._overlay_buttons[flag].setChecked(visible)
+        self.view.render(self.session, self.case_id)
     def change_vertical(self):
         values=[1.,1.5,2.,3.,4.];current=self.view._vertical
         nxt=values[(values.index(current)+1)%len(values)] if current in values else 1.
@@ -632,6 +864,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def new(self):
         if not self._maybe_save():return
         self.session=Session();self.undo_stack.clear();self.redo_stack.clear();self.filepath=None
+        self._selected = []
         self._dirty=False;self.refresh(fit=True)
     def open(self):
         if not self._maybe_save():return
@@ -640,6 +873,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         try:new_session=Session(load_project(name))
         except Exception as exc:QMessageBox.warning(self,'Abrir',str(exc));return
         self.session=new_session;self.filepath=Path(name);self.undo_stack.clear();self.redo_stack.clear()
+        self._selected = []
         self._dirty=False;self.refresh(fit=True)
     def save(self):
         if self.filepath is None:return self.save_as()
@@ -698,10 +932,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def setup_task_tree(self):
         self.task_tree.blockSignals(True);self.task_tree.clear();self._task_by_index={}
         groups={
-            '01 · CONCEPÇÃO':('Geometria','Telha / modulação','Perfis'),
-            '02 · MODELAGEM':('Propriedades','Estabilidade'),
-            '03 · AÇÕES':('Cargas','Ações gerais','Combinações'),
-            '04 · ANÁLISE':('Resultados','Alternativas','Diagnóstico'),
+            'Concepção':('Geometria','Telha / modulação','Perfis'),
+            'Modelagem':('Propriedades','Estabilidade'),
+            'Ações':('Cargas','Ações gerais','Combinações'),
+            'Análise':('Resultados','Alternativas','Diagnóstico'),
         }
         assigned=set()
         for title,labels in groups.items():
@@ -715,7 +949,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             root.setExpanded(True)
         others=[i for i in range(self.info_tabs.count()) if i not in assigned]
         if others:
-            root=QTreeWidgetItem(['05 · OUTROS']);self.task_tree.addTopLevelItem(root)
+            root=QTreeWidgetItem(['Outros']);self.task_tree.addTopLevelItem(root)
             for i in others:
                 item=QTreeWidgetItem([self.info_tabs.tabText(i)])
                 item.setData(0,Qt.ItemDataRole.UserRole,i);root.addChild(item)
@@ -729,6 +963,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if isinstance(index,int):self.info_tabs.setCurrentIndex(index)
 
     def update_task_selection(self,index):
+        if index >= 0:
+            self.inspector_title.setText(self.info_tabs.tabText(index))
         if not hasattr(self,'task_tree'):return
         target=getattr(self,'_task_by_index',{}).get(index)
         if target is None:return
@@ -750,10 +986,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def quick_select_member(self,row,column):
         item=self.quick_table.item(row,0)
         if not item:return
-        mid=item.text();self._update_selection([('member',mid)])
-        target=self.view._members.get(mid)
-        if target is not None:
-            self.view.scene().clearSelection();target.setSelected(True)
+        selection = [('member', item.text())]
+        self._set_canvas_selection(selection)
+        self._update_selection(selection)
 
     def refresh_quick_table(self):
         if not hasattr(self,'quick_table'):return
@@ -762,7 +997,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             data=self.session.result
             if not data or not self.case_id or self.case_id not in data.get('analyses',{}):
                 self.quick_table.setRowCount(0)
-                self.dock_info.setText('Modelo não calculado ou editado após a última análise.')
+                self.dock_info.setText('Sem resultados no caso selecionado')
                 return
             axial=data['analyses'][self.case_id].get('axial_n',{})
             records=sorted(self.session.model.members,key=lambda m:abs(axial.get(m.id,0)),reverse=True)
@@ -771,7 +1006,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 f=axial.get(m.id,0)
                 for j,val in enumerate((m.id,m.group,f'{f/1000:+.2f}',m.profile)):
                     cell=QTableWidgetItem(str(val))
-                    if j==2:cell.setForeground(QColor('#BC3D4E' if f>0 else '#2766A7'))
+                    if j == 2:
+                        cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                        if f:
+                            cell.setForeground(QColor('#BC3D4E' if f>0 else '#2766A7'))
                     self.quick_table.setItem(i,j,cell)
             self.dock_info.setText(f'{len(records)} barras · {self.case_id} · valores do modelo calculado')
         finally:self.quick_table.blockSignals(False)

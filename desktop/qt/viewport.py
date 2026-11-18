@@ -4,8 +4,8 @@ Qt somente representa/despacha comandos de edição. Todas as mutações passam
 por desktop.editing + Session.update_project e são validadas pelo núcleo.
 """
 from __future__ import annotations
-from math import atan2,degrees,hypot
-from PySide6.QtCore import Qt,QPointF,Signal,QRectF
+from math import atan2,ceil,degrees,floor,hypot,log10
+from PySide6.QtCore import Qt,QLineF,QPointF,QSignalBlocker,Signal,QRectF
 from PySide6.QtGui import QColor,QPen,QBrush,QFont,QPainter,QTransform
 from PySide6.QtWidgets import (QGraphicsView,QGraphicsScene,QGraphicsEllipseItem,
                                QGraphicsLineItem,QGraphicsSimpleTextItem,QGraphicsItem)
@@ -38,6 +38,17 @@ class MemberItem(QGraphicsLineItem):
         self.setPen(pen)  # largura cosmética em qualquer zoom
         self.setToolTip(f'{m.id} | {m.group} | {m.profile}' + (f' | N={force/1000:+.2f} kN' if force is not None else ''))
 
+    def paint(self, painter, option, widget=None):
+        painter.save()
+        if self.isSelected():
+            outline = QPen(QColor('#F9BF58'), 6)
+            outline.setCosmetic(True)
+            painter.setPen(outline)
+            painter.drawLine(self.line())
+        painter.setPen(self.pen())
+        painter.drawLine(self.line())
+        painter.restore()
+
 
 class TrussView(QGraphicsView):
     selected=Signal(list)            # [(kind, id)]
@@ -46,6 +57,7 @@ class TrussView(QGraphicsView):
     split_member=Signal(str,float)
     moved=Signal(object)             # {id: (x_mm,y_mm)}
     status_text=Signal(str)
+    coordinates_changed = Signal(float, float)
 
     def __init__(self,parent=None):
         super().__init__(parent)
@@ -55,10 +67,12 @@ class TrussView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-        self.setBackgroundBrush(QBrush(QColor('#F8FBFE')))
+        self.setBackgroundBrush(QBrush(QColor('#F5F8FB')))
         self.setStyleSheet('border:0;')
         self.tool='select';self.grid_mm=50.;self.snap_enabled=True
-        self.show_ids=True;self.show_efforts=False;self.show_forces=False
+        self.grid_visible = True
+        self._analysis_id = None
+        self.show_ids=False;self.show_efforts=False;self.show_forces=False
         self.show_deformed=False;self.show_all_labels=False
         self._members={};self._nodes={};self._drafts={};self._pos={}
         self._analysis=None;self._model=None;self._session=None
@@ -88,6 +102,44 @@ class TrussView(QGraphicsView):
             elif isinstance(item,MemberItem):data.append(('member',item.member_id))
         self.selected.emit(data)
 
+    def selection_item(self, kind, identifier):
+        if kind == 'node':
+            return self._nodes.get(identifier) or self._drafts.get(identifier)
+        return self._members.get(identifier)
+
+    def set_grid_visible(self, visible):
+        self.grid_visible = visible
+        self.viewport().update()
+
+    def drawBackground(self, painter, rect):
+        super().drawBackground(painter, rect)
+        if not self.grid_visible:
+            return
+        transform = painter.worldTransform()
+        target = 32 / max(transform.m11(), 1e-12)
+        magnitude = 10 ** floor(log10(target))
+        step = next(factor * magnitude for factor in (1, 2, 5, 10)
+                    if factor * magnitude >= target)
+        y_step = step * self._vertical
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        for multiple, color in [(1, '#E5EBF1'), (5, '#D7E1EB')]:
+            pen = QPen(QColor(color))
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            dx, dy = step * multiple, y_step * multiple
+            lines = [QLineF(i * dx, rect.top(), i * dx, rect.bottom())
+                     for i in range(ceil(rect.left() / dx), floor(rect.right() / dx) + 1)]
+            lines.extend(QLineF(rect.left(), i * dy, rect.right(), i * dy)
+                         for i in range(ceil(rect.top() / dy), floor(rect.bottom() / dy) + 1))
+            painter.drawLines(lines)
+        painter.restore()
+
+    def mouseMoveEvent(self, event):
+        point = self.mapToScene(event.position().toPoint())
+        self.coordinates_changed.emit(point.x(), -point.y() / self._vertical)
+        super().mouseMoveEvent(event)
+
     def _add_text(self,text,pos,size=11,color=NAVY,rotation=0,bold=False):
         item=QGraphicsSimpleTextItem(str(text))
         f=QFont('Segoe UI',size)
@@ -101,7 +153,9 @@ class TrussView(QGraphicsView):
 
     def render(self,session,analysis_id=None,*,fit=False):
         """Renderização sem recalcular ou modificar a estrutura."""
+        selection = self.selected_ids() if session is self._session else []
         self._session=session;model=session.model;self._model=model
+        self._analysis_id = analysis_id
         self._analysis=(session.result or {}).get('analyses',{}).get(analysis_id) if analysis_id else None
         scene=self.scene();scene.blockSignals(True);scene.clear()
         self._members={};self._nodes={};self._drafts={}
@@ -110,7 +164,7 @@ class TrussView(QGraphicsView):
         for m in model.members:
             item=MemberItem(m,self._pos,force.get(m.id) if self.show_efforts else None)
             scene.addItem(item);self._members[m.id]=item
-        # valores das barras: texto orientado, 11 pontos e priorização automática
+        # Os esforços de maior magnitude são anotados primeiro.
         if self.show_efforts and self._analysis:
             ranked=sorted(model.members,key=lambda m:abs(force.get(m.id,0)),reverse=True)
             for m in ranked if self.show_all_labels else ranked[:min(24,len(ranked))]:
@@ -125,7 +179,7 @@ class TrussView(QGraphicsView):
                 if length<1:continue
                 mid=QPointF((a.x()+b.x())/2,(a.y()+b.y())/2)
                 shift=QPointF(-dy/length*80,dx/length*80)
-                self._add_text(f'{axial/1000:+.2f}',mid+shift,12,TENS if axial>0 else COMP,ang,True)
+                self._add_text(f'{axial/1000:+.2f}',mid+shift,10,TENS if axial>0 else COMP,ang,True)
         for n in model.nodes:
             item=NodeItem(n.id,n.x,n.y*self._vertical)
             scene.addItem(item);self._nodes[n.id]=item
@@ -168,6 +222,11 @@ class TrussView(QGraphicsView):
                 pen=QPen(QColor('#16A38C'),1.5,Qt.PenStyle.DashLine);line.setPen(pen);line.setZValue(4);scene.addItem(line)
             self._add_text(f'Deformada amplificada ×{amp:.1f}',QPointF(min(n.x for n in model.nodes),-max(n.y for n in model.nodes)*self._vertical-400),10,'#087C69')
         scene.blockSignals(False)
+        with QSignalBlocker(scene):
+            for kind, identifier in selection:
+                item = self.selection_item(kind, identifier)
+                if item is not None:
+                    item.setSelected(True)
         scene.setSceneRect(scene.itemsBoundingRect().adjusted(-400,-400,400,400))
         self._selected()
         if fit or not self._fit_pending:self.fit()
@@ -183,7 +242,7 @@ class TrussView(QGraphicsView):
 
     def set_vertical_factor(self,factor):
         self._vertical=max(1.,min(5.,float(factor)))
-        if self._session:self.render(self._session,fit=True)
+        if self._session:self.render(self._session,self._analysis_id,fit=True)
 
     def _snap(self,pt):
         """Snap por extremidade/ponto médio e por grade, tolerância de 12 pixels.

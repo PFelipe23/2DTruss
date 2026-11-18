@@ -98,7 +98,11 @@ A aba **Combinações** permite criar, excluir e editar fatores assinados por ca
 
 A visualização continua **geométrica**, não uma análise 3D ou verificação normativa. A versão atual renderiza faces por ordenação de profundidade sem z-buffer; interseções visuais complexas não estão homologadas para análise de interferências.
 
-A aplicação principal foi reorganizada com navegador filtrável, painel de tarefas fixo, ribbon agrupado e tabela de esforços abaixo do viewport. Veja `docs/REDESENHO_UI_E_PERFIS_3D_V09.md`.
+A barra superior reúne arquivos, análise e a vista 3D. Use as abas da faixa de comandos para criar e editar o modelo, atribuir ações e controlar o que aparece no desenho. À esquerda, **Modelo** filtra nós e barras por ID ou grupo, e **Tarefas** abre as páginas do inspetor à direita.
+
+A barra do desenho oferece seleção, movimentação, pan, enquadramento e escolha de caso ou combinação. A barra inferior mostra as coordenadas em milímetros, o estado da análise e os controles independentes de grade e snap. **Exibição → IDs dos nós** liga os identificadores no desenho.
+
+`F5` calcula e abre a tabela inferior. Clique numa linha para inspecionar a barra ou use **Detalhar** para consultar filtros e envoltórias. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
 
 ## Limites ainda presentes
 
