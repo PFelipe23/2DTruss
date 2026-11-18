@@ -8,6 +8,7 @@ from copy import deepcopy
 from math import isfinite
 from poe_truss.materials import STEEL_GRADES
 from poe_truss.model import GROUPS
+from poe_truss.units import FORCE_TO_N
 
 LOAD_KINDS = ('self_weight','surface','line','nodal')
 DIRECTIONS = ('down','up','outward_normal','inward_normal','right','left')
@@ -44,6 +45,30 @@ def update_steel(project, grade_id):
         fy_MPa=grade.fy, fu_MPa=grade.fu, source=grade.source,
     )
     updated.pop('external_resistances', None)
+    return updated
+
+
+def update_nodal_loads(project, model, case_id, node_ids, fx, fy, force_unit, index=None):
+    """Insere uma parcela por nó ou substitui uma única linha existente."""
+    targets = list(dict.fromkeys(node_ids))
+    valid_nodes = model.node_map()
+    if not targets or any(node not in valid_nodes for node in targets):
+        raise ValueError('Selecione nós conectados ao modelo.')
+    if force_unit not in FORCE_TO_N or not all(isfinite(value) for value in (fx, fy)):
+        raise ValueError('Verifique a unidade e as componentes da força.')
+
+    updated = deepcopy(project)
+    case = next((entry for entry in updated.get('load_cases', []) if entry['id'] == case_id), None)
+    if case is None or case['kind'] != 'nodal':
+        raise ValueError('Caso nodal não encontrado')
+    rows = case.setdefault('loads', [])
+    additions = [{'node': node, 'fx': fx, 'fy': fy, 'force_unit': force_unit} for node in targets]
+    if index is None:
+        rows.extend(additions)
+    elif len(targets) == 1 and 0 <= index < len(rows):
+        rows[index] = {**rows[index], **additions[0]}
+    else:
+        raise IndexError('Índice da força nodal inexistente')
     return updated
 
 

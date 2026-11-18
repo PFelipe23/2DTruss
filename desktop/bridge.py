@@ -8,6 +8,7 @@ from poe_truss.catalog import load_catalog
 from poe_truss.engine import run_project
 from poe_truss.model import make_model
 from poe_truss.loads import build_case_loads, merge_forces
+from .workflow import update_nodal_loads
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT = ROOT / 'examples' / 'cobertura_duas_aguas.json'
@@ -97,17 +98,9 @@ class Session:
         self.update_project(p)
 
     def set_nodal_load(self, case_id:str, node_id:str, fx:float, fy:float, force_unit='kgf', index=None):
-        if node_id not in {n.id for n in self.model.nodes}: raise ValueError('Nó inexistente')
-        if force_unit not in ('kgf','tf','kN','N'): raise ValueError('Unidade inválida')
-        if not all(isfinite(float(v)) for v in (fx,fy)): raise ValueError('Força inválida')
-        p=deepcopy(self.project)
-        case=next((x for x in p['load_cases'] if x['id']==case_id),None)
-        if case is None or case['kind']!='nodal': raise ValueError('Caso nodal não encontrado')
-        row={'node':node_id,'fx':float(fx),'fy':float(fy),'force_unit':force_unit}
-        if index is None:case.setdefault('loads',[]).append(row)
-        elif 0<=index<len(case['loads']):case['loads'][index]=row
-        else: raise IndexError('Índice da força nodal inexistente')
-        self.update_project(p)
+        self.update_project(update_nodal_loads(
+            self.project, self.model, case_id, [node_id], float(fx), float(fy), force_unit, index,
+        ))
 
     def delete_nodal_load(self,case_id,index:int):
         p=deepcopy(self.project)
@@ -117,12 +110,20 @@ class Session:
         self.update_project(p)
 
     def forces_for_case(self, case_id:str):
-        raw={}
-        for c in self.project.get('load_cases',[]):
-            if c['kind']=='nodal' and not c.get('loads'):
-                raw[c['id']]={}
-            else:raw[c['id']]=build_case_loads(self.model,c)[0]
-        if case_id in raw:return raw[case_id]
-        comb=next((c for c in self.project.get('combinations',[]) if c['id']==case_id),None)
-        if comb:return merge_forces(comb['factors'],raw)
+        cases = {case['id']: case for case in self.project.get('load_cases', [])}
+
+        def nodal_forces(case):
+            if case['kind'] == 'nodal' and not case.get('loads'):
+                return {}
+            return build_case_loads(self.model, case)[0]
+
+        if case_id in cases:
+            return nodal_forces(cases[case_id])
+        combination = next((entry for entry in self.project.get('combinations', [])
+                            if entry['id'] == case_id), None)
+        if combination and combination['factors']:
+            factors = combination['factors']
+            zeros = {node.id: (0., 0.) for node in self.model.nodes}
+            raw = {key: nodal_forces(cases[key]) or zeros for key in factors if key in cases}
+            return merge_forces(factors, raw)
         return {}

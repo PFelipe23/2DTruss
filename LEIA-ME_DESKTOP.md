@@ -83,6 +83,12 @@ A aba **Perfis** altera os perfis por grupo, a quantidade de componentes, a modu
 
 A aba **Combinações** permite criar, excluir e editar fatores assinados por caso; não calcula coeficientes normativos automaticamente. A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções, sem impedir valores manuais fora da pesquisa. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
 
+### Inserir e conferir cargas em 2D
+
+Em **Ações → Inserir cargas**, escolha ou crie um caso nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a mesma força em vários nós, selecione-os com Ctrl+clique e use **Aplicar a n nós selecionados**. Cada nó recebe uma parcela com os mesmos valores. Clique numa parcela da tabela para editar ou remover essa linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
+
+**Ações gerais** mostra os campos pertinentes ao tipo do caso. Selecione um caso ou combinação no desenho e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. As setas apontam para os nós e seus comprimentos são relativos à maior força do caso. A faixa mostra a soma de `Fx` e `Fy` em kN. Use **Valores** para exibir magnitudes onde houver espaço e passe o cursor sobre um nó para ver suas componentes.
+
 ## Área de trabalho
 
 A barra superior reúne arquivos, análise e o botão **2D | 3D**. Use as abas da faixa de comandos para criar e editar o modelo, atribuir ações e controlar o que aparece no desenho. À esquerda, **Modelo** filtra nós e barras por ID ou grupo, e **Tarefas** abre as páginas do inspetor à direita.

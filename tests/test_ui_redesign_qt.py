@@ -11,6 +11,58 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_batch_nodal_loads_follow_the_canvas_case_and_edit_one_parcel(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from desktop.bridge import Session, load_project
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        project = load_project()
+        project['load_cases'].extend([
+            {'id': 'Q_EMPTY', 'kind': 'nodal', 'loads': []},
+            {'id': 'Q_NODAL', 'kind': 'nodal', 'loads': []},
+        ])
+        project['combinations'].append({'id': 'COMB_UI', 'factors': {'Q_EMPTY': 1, 'Q_NODAL': 2}})
+        window = DesktopApp(Session(project))
+        window.show()
+        try:
+            window.open_nodal_loads()
+            window.load_case.setCurrentText('Q_NODAL')
+            app.processEvents()
+            window.fit()
+            nodes = [node.id for node in window.session.model.nodes[1:3]]
+            for index, node in enumerate(nodes):
+                position = window.view.mapFromScene(window.view.selection_item('node', node).pos())
+                modifier = Qt.KeyboardModifier.ControlModifier if index else Qt.KeyboardModifier.NoModifier
+                QTest.mouseClick(window.view.viewport(), Qt.MouseButton.LeftButton, modifier, position)
+            window.fx.setValue(1)
+            window.fy.setValue(-2)
+            self.assertEqual(window.case_id, 'Q_NODAL')
+            self.assertTrue(window.batch_load.isEnabled())
+            self.assertEqual(set(window._selected_load_nodes()), set(nodes))
+            QTest.mouseClick(window.batch_load, Qt.MouseButton.LeftButton)
+            self.assertEqual(window.load_table.rowCount(), 2)
+            self.assertEqual(len(window.view._force_items), 2)
+            self.assertIn('ΣFy -4.00', window.force_summary.text())
+
+            window.load_table.selectRow(0)
+            window.fy.setValue(-1)
+            QTest.mouseClick(window.commit_load, Qt.MouseButton.LeftButton)
+            self.assertEqual(window.load_table.rowCount(), 2)
+            self.assertIn('ΣFy -3.00', window.force_summary.text())
+            window.cases.setCurrentText('COMB_UI')
+            self.assertIn('ΣFy -6.00', window.force_summary.text())
+            window.load_case.setCurrentText('Q_EMPTY')
+            self.assertEqual(window.case_id, 'Q_EMPTY')
+            self.assertFalse(window.view._force_items)
+            self.assertIn('Sem cargas', window.force_summary.text())
+        finally:
+            window._dirty = False
+            window.close()
+
     def test_profiles_and_steel_update_the_active_3d_view(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtWidgets import QApplication

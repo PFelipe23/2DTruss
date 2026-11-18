@@ -70,6 +70,8 @@ QScrollBar::handle:vertical {background:#B6C9D8;border-radius:3px;min-height:22p
 QFrame#ribbonGroup {border-right:1px solid #D7E1EA;background:#FFFFFF;}
 QLabel#ribbonCaption {color:#526A7E;}
 QFrame#viewportBar {background:#EDF3F8;border-top:1px solid #D9E4ED;border-bottom:1px solid #D9E4ED;}
+QFrame#forceBar {background:#FFF8ED;border-bottom:1px solid #E9D8BD;}
+QFrame#forceBar QLabel {color:#784517;}
 QLabel#calcPending {color:#78521A;background:#FFF0D5;border-radius:4px;padding:3px 8px;}
 QLabel#calcReady {color:#146147;background:#DCF2E8;border-radius:4px;padding:3px 8px;}
 '''

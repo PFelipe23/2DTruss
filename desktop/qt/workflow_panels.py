@@ -31,6 +31,14 @@ def row_buttons(*commands):
         b=QPushButton(action_icon(icon), label);b.clicked.connect(callback);h.addWidget(b)
     return w
 
+
+def labeled_combo(options):
+    combo = QComboBox()
+    for key, label in options:
+        combo.addItem(label, key)
+    return combo
+
+
 class WorkflowMixin:
     def _build_engineering_tabs(self):
         self._build_profiles_tab()
@@ -158,35 +166,45 @@ class WorkflowMixin:
         tab=QWidget();v=QVBoxLayout(tab)
         v.addWidget(QLabel('Ações: G, Q e vento · valores fornecidos pelo projetista'))
         self.action_case=QComboBox();self.action_case.currentTextChanged.connect(self._populate_case)
+        self.action_case.activated.connect(lambda _: self._show_load_case(self.action_case.currentText()))
         v.addWidget(self.action_case)
         box=QGroupBox('Parâmetros do caso');f=QFormLayout(box)
+        self.action_form = f
         self.action_name=QLineEdit()
-        self.action_kind=QComboBox()
-        self.action_kind.addItems(['self_weight','surface','line','nodal'])
-        self.action_kind.currentTextChanged.connect(self._case_controls)
-        self.action_value=field(0,0,1e9,2,1)
+        self.action_kind = labeled_combo([('self_weight', 'Peso próprio'), ('surface', 'Superficial'),
+                                          ('line', 'Linear'), ('nodal', 'Nodal')])
+        self.action_kind.currentIndexChanged.connect(self._case_controls)
+        self.action_value=field(0,0,1e9,3,1)
         self.action_force_unit=QComboBox();self.action_force_unit.addItems(['kgf','kN','tf','N'])
-        self.action_application=QComboBox();self.action_application.addItems(['top','bottom'])
-        self.action_basis=QComboBox();self.action_basis.addItems(['projected','roof_surface'])
-        self.action_direction=QComboBox();self.action_direction.addItems(workflow.DIRECTIONS)
-        self.action_zone=QComboBox();self.action_zone.addItems(['all','left','right'])
+        self.action_application = labeled_combo([('top', 'Banzo superior'), ('bottom', 'Banzo inferior')])
+        self.action_basis = labeled_combo([('projected', 'Projeção horizontal'),
+                                           ('roof_surface', 'Inclinação da cobertura')])
+        self.action_direction = labeled_combo([
+            ('down', 'Para baixo'), ('up', 'Para cima'), ('outward_normal', 'Normal para fora'),
+            ('inward_normal', 'Normal para dentro'), ('right', 'Para a direita'), ('left', 'Para a esquerda'),
+        ])
+        self.action_zone = labeled_combo([('all', 'Toda a treliça'), ('left', 'Metade esquerda'),
+                                         ('right', 'Metade direita')])
         for label,widget in [('Nome',self.action_name),('Tipo',self.action_kind),
             ('Intensidade',self.action_value),('Unidade força',self.action_force_unit),
             ('Aplicação',self.action_application),('Base geométrica',self.action_basis),
             ('Direção',self.action_direction),('Região',self.action_zone)]:f.addRow(label,widget)
         f.addRow(row_buttons(('Adicionar',self._new_action_case,'add'),('Aplicar',self._apply_action_case,'check'),
                               ('Excluir',self._delete_action_case,'delete')))
-        f.addRow(row_buttons(('Mostrar forças nodais resultantes',self._audit_selected_case,'table')))
+        f.addRow(row_buttons(('Conferir distribuição nodal',self._audit_selected_case,'table')))
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
         v.addStretch(1);self.actions_tab=tab;self._add_inspector_page(tab,'Ações gerais')
 
     def _case_controls(self,*_):
-        kind=self.action_kind.currentText();general=kind in ('surface','line')
+        kind = self.action_kind.currentData()
+        general = kind in ('surface', 'line')
+        self.action_value.setSuffix(' /m²' if kind == 'surface' else ' /m')
         for w in (self.action_value,self.action_force_unit,self.action_application,self.action_basis,
-                  self.action_direction,self.action_zone):w.setEnabled(general)
-        if kind=='nodal':self.action_audit.setText('Edite as forças nodais na aba Cargas.')
+                  self.action_direction,self.action_zone):
+            self.action_form.setRowVisible(w, general)
+        if kind=='nodal':self.action_audit.setText('Edite as forças em Cargas nodais.')
         elif kind=='self_weight':self.action_audit.setText('Peso próprio: massa das barras e gravidade nominal g=10 m/s².')
         elif kind=='surface':self.action_audit.setText('Intensidade em força/m²; áreas tributárias obtidas do modelo.')
         else:self.action_audit.setText('Intensidade em força/m; comprimento inclinado ou projetado.')
@@ -195,14 +213,15 @@ class WorkflowMixin:
         cid=self.action_case.currentText()
         case=next((x for x in self.session.project.get('load_cases',[]) if x['id']==cid),None)
         if not case:return
+        self.action_force_unit.setCurrentText(case.get('force_unit', 'kgf'))
         pairs=[(self.action_kind,case.get('kind','surface')),
-            (self.action_force_unit,case.get('force_unit','kgf')),
             (self.action_application,case.get('application','top')),
             (self.action_basis,case.get('basis','projected')),
             (self.action_direction,case.get('direction','down')),
             (self.action_zone,case.get('zone','all'))]
-        for cb,text in pairs:
-            cb.blockSignals(True);cb.setCurrentText(str(text));cb.blockSignals(False)
+        for combo, key in pairs:
+            with QSignalBlocker(combo):
+                combo.setCurrentIndex(combo.findData(key))
         self.action_name.setText(case.get('name',cid))
         self.action_value.setValue(float(case.get('value',0)))
         self._case_controls()
@@ -216,12 +235,8 @@ class WorkflowMixin:
             _,audit=build_case_loads(self.session.model,case)
             self.action_audit.setText(f'{cid}: {audit["n_entries"]} parcelas; '
                 f'ΣFx = {audit["sum_fx_n"]/1000:+.3f} kN; '
-                f'ΣFy = {audit["sum_fy_n"]/1000:+.3f} kN; '
-                'resíduos da transformação nodal conferidos')
-            if cid in [self.cases.itemText(i) for i in range(self.cases.count())]:
-                self.cases.setCurrentText(cid)
-            self.view.show_forces=True
-            self.view.render(self.session,cid)
+                f'ΣFy = {audit["sum_fy_n"]/1000:+.3f} kN')
+            self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Auditoria de ações',str(e))
 
     def _new_action_case(self):
@@ -229,7 +244,9 @@ class WorkflowMixin:
         if not ok:return
         try:
             p=workflow.add_load_case(self.session.project,name,'surface')
-            if self._apply(p,'Caso incluído'):self.action_case.setCurrentText(name.strip())
+            if self._apply(p,'Caso incluído'):
+                self.action_case.setCurrentText(name.strip())
+                self._show_load_case(name.strip())
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
 
     def _apply_action_case(self):
@@ -237,16 +254,27 @@ class WorkflowMixin:
         if not cid:return
         try:
             p=workflow.update_load_case(self.session.project,cid,
-                name=self.action_name.text(),kind=self.action_kind.currentText(),
+                name=self.action_name.text(),kind=self.action_kind.currentData(),
                 value=self.action_value.value(),force_unit=self.action_force_unit.currentText(),
-                application=self.action_application.currentText(),basis=self.action_basis.currentText(),
-                direction=self.action_direction.currentText(),zone=self.action_zone.currentText())
-            self._apply(p,'Caso de carga modificado')
+                application=self.action_application.currentData(),basis=self.action_basis.currentData(),
+                direction=self.action_direction.currentData(),zone=self.action_zone.currentData())
+            if self._apply(p,'Caso de carga modificado'):
+                self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
 
     def _delete_action_case(self):
         try:self._apply(workflow.delete_load_case(self.session.project,self.action_case.currentText()),'Caso excluído')
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
+
+    def open_general_actions(self):
+        if self.mode_3d.isChecked():
+            self.set_3d_visible(False)
+        if self.focus_button.isChecked():
+            self._set_drawing_only(False)
+        self._show_inspector(self.actions_tab)
+        if self.action_case.findText(self.case_id or '') >= 0:
+            self.action_case.setCurrentText(self.case_id)
+        self._show_load_case(self.action_case.currentText())
 
     def _build_combinations_tab(self):
         tab=QWidget();v=QVBoxLayout(tab)

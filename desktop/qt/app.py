@@ -5,6 +5,7 @@ Nenhum navegador, servidor HTTP ou webview integra o processo desktop.
 """
 from __future__ import annotations
 from copy import deepcopy
+from math import fsum, hypot
 from pathlib import Path
 import json
 import sys
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBo
     QButtonGroup,QScrollArea,QStackedWidget)
 
 from desktop.bridge import Session,load_project,write_project
-from desktop import editing,cad_io
+from desktop import editing,cad_io,workflow
 from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html,ftool_comparison_full_rows
 from poe_truss.version import APP_NAME, TAG
 from .action_icons import action_icon
@@ -180,9 +181,25 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.cases.currentTextChanged.connect(self.on_case)
         strip.addWidget(QLabel('Caso'))
         strip.addWidget(self.cases)
+        self.forces_button = _button('Cargas', lambda visible: self._set_overlay('show_forces', visible),
+                                     'load', checkable=True)
+        strip.addWidget(self.forces_button)
         self.results_button = _button('Resultados', self._set_results_visible, 'table', checkable=True)
         strip.addWidget(self.results_button)
         center_layout.addWidget(bar)
+        self.force_bar = QFrame()
+        self.force_bar.setObjectName('forceBar')
+        force_layout = QHBoxLayout(self.force_bar)
+        force_layout.setContentsMargins(9, 3, 8, 3)
+        self.force_summary = QLabel()
+        self.force_summary.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        force_layout.addWidget(self.force_summary, 1)
+        self.force_values = _button('Valores', self.view.set_load_values, 'ids', checkable=True)
+        self.force_values.setToolTip('Exibir a magnitude das resultantes nodais em kN')
+        force_layout.addWidget(self.force_values)
+        self.force_bar.hide()
+        self.view.forces_displayed.connect(self._show_force_summary)
+        center_layout.addWidget(self.force_bar)
 
         self.center_split = QSplitter(Qt.Orientation.Vertical)
         self.center_split.setChildrenCollapsible(False)
@@ -311,10 +328,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                            ('Editar', [('Subdividir', 'split', 'split'), ('Excluir', self.delete_selected, 'delete')]),
                            ('Atribuir', [('Grupo da barra', self.change_group, 'group'),
                                          ('Perfis', lambda: self._show_inspector(self.profile_tab), 'profile')])]),
-            ('Ações', [('Cargas nodais', [('Adicionar carga', self.add_load, 'load'),
+            ('Ações', [('Cargas nodais', [('Inserir cargas', self.open_nodal_loads, 'load'),
                                          ('Novo caso', self.add_case, 'add')]),
                        ('Modelo', [('Apoios X/Y', lambda: self.info_tabs.setCurrentIndex(1), 'support'),
-                                   ('Ações gerais', lambda: self._show_inspector(self.actions_tab), 'actions'),
+                                   ('Ações gerais', self.open_general_actions, 'actions'),
                                    ('Combinações', lambda: self._show_inspector(self.combo_tab), 'combine')])]),
             ('Análise', [('Consultar', [('Esforços', lambda: self._set_results_visible(True), 'table'),
                                        ('Alternativas', lambda: self._show_inspector(self.search_tab), 'compare'),
@@ -401,6 +418,25 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _show_coordinates(self, x, y):
         self.coordinates.setText(f'X {x:,.1f}    Y {y:,.1f}    mm')
 
+    def _show_force_summary(self, forces, error):
+        self.force_bar.setVisible(self.view.show_forces and not self.mode_3d.isChecked())
+        if error:
+            self.force_summary.setText(f'{self.case_id} · Falha ao exibir as cargas')
+            self.force_summary.setToolTip(error)
+            return
+        active = [(fx, fy) for fx, fy in forces.values() if hypot(fx, fy) > 1e-8]
+        if active:
+            fx = fsum(x for x, _ in active) / 1000
+            fy = fsum(y for _, y in active) / 1000
+            self.force_summary.setText(
+                f'{self.case_id} · {len(active)} nós com carga · ΣFx {fx:+.2f} · ΣFy {fy:+.2f} kN'
+            )
+        else:
+            self.force_summary.setText(f'{self.case_id or "Caso"} · Sem cargas nodais resultantes')
+        self.force_summary.setToolTip(
+            'Resultantes nodais do caso ou combinação selecionada. Setas em escala relativa.'
+        )
+
 
     def _build_model_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
@@ -452,33 +488,75 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         col.addStretch(1);self._add_inspector_page(tab,'Propriedades')
 
     def _build_loads_tab(self):
-        tab=QWidget();col=QVBoxLayout(tab)
-        row=QHBoxLayout();self.load_case=QComboBox()
-        self.load_case.currentTextChanged.connect(self.refresh_load_table)
-        row.addWidget(self.load_case,1)
-        button=QPushButton(action_icon('add'), 'Novo caso');button.clicked.connect(self.add_case);row.addWidget(button)
+        self.loads_tab = QWidget()
+        col = QVBoxLayout(self.loads_tab)
+        row = QHBoxLayout()
+        self.load_case = QComboBox()
+        self.load_case.setPlaceholderText('Escolher caso nodal')
+        self.load_case.setAccessibleName('Caso nodal para edição')
+        self.load_case.currentTextChanged.connect(self._load_case_changed)
+        row.addWidget(self.load_case, 1)
+        row.addWidget(_button('Novo caso', self.add_case, 'add'))
         col.addLayout(row)
+
+        nodal = QGroupBox('Força por nó')
+        fields = QFormLayout(nodal)
+        fields.setVerticalSpacing(4)
+        self.load_node = QComboBox()
+        self.load_node.setPlaceholderText('Escolher nó')
+        self.load_node.currentTextChanged.connect(self._refresh_load_controls)
+        fields.addRow('Nó', self.load_node)
+        self.fx = _spin(0, -1e9, 1e9, 3, 1)
+        self.fy = _spin(0, -1e9, 1e9, 3, 1)
+        self.fx.valueChanged.connect(self._refresh_load_controls)
+        self.fy.valueChanged.connect(self._refresh_load_controls)
+        components = QHBoxLayout()
+        for title, spin in (('Fx (+ direita)', self.fx), ('Fy (+ acima)', self.fy)):
+            component = QVBoxLayout()
+            component.setSpacing(3)
+            label = QLabel(title)
+            label.setBuddy(spin)
+            spin.setMinimumWidth(0)
+            spin.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            component.addWidget(label)
+            component.addWidget(spin)
+            components.addLayout(component)
+        fields.addRow(components)
+        self.force_unit = QComboBox()
+        self.force_unit.addItems(['kN', 'N', 'kgf', 'tf'])
+        fields.addRow('Unidade', self.force_unit)
+        self.commit_load = _button('Adicionar', self.add_load, 'add')
+        fields.addRow(self.commit_load)
+        self.batch_load = _button('Aplicar aos nós selecionados', self.add_load_batch, 'group')
+        self.batch_load.setToolTip('Adicionar uma parcela com os valores do formulário em cada nó selecionado')
+        fields.addRow(self.batch_load)
+        col.addWidget(nodal)
+
+        self.load_note = QLabel()
+        self.load_note.setWordWrap(True)
+        col.addWidget(self.load_note)
+        parcels = QHBoxLayout()
+        parcels.addWidget(QLabel('Parcelas'))
+        parcels.addStretch()
+        self.new_load = _button('Nova', self.clear_load_selection, 'new')
+        self.delete_load = _button('Remover', self.remove_load, 'delete')
+        parcels.addWidget(self.new_load)
+        parcels.addWidget(self.delete_load)
+        col.addLayout(parcels)
         self.load_table=QTableWidget(0,4)
         self.load_table.setHorizontalHeaderLabels(['Nó','Fx','Fy','Unid.'])
         self.load_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.load_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.load_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.load_table.itemSelectionChanged.connect(self.load_row_selected)
+        self.load_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.load_table.verticalHeader().hide()
+        self.load_table.verticalHeader().setDefaultSectionSize(23)
+        self.load_table.setAlternatingRowColors(True)
+        self.load_table.setMinimumHeight(96)
+        self.load_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self.load_table.currentCellChanged.connect(self.load_row_selected)
         col.addWidget(self.load_table,1)
-        nodal=QGroupBox('Inserção/edição nodal');fields=QFormLayout(nodal)
-        self.load_node=QComboBox();fields.addRow('Nó',self.load_node)
-        self.fx=_spin(0,-1e9,1e9,2,10);self.fy=_spin(0,-1e9,1e9,2,10)
-        fields.addRow('Fx',self.fx);fields.addRow('Fy',self.fy)
-        self.force_unit=QComboBox();self.force_unit.addItems(['kgf','tf','kN','N'])
-        fields.addRow('Unidade',self.force_unit)
-        btn=QHBoxLayout();new_load=QPushButton(action_icon('new'), 'Nova');new_load.clicked.connect(self.clear_load_selection)
-        a=QPushButton(action_icon('check'), 'Inserir/atualizar');a.clicked.connect(self.add_load)
-        b=QPushButton(action_icon('delete'), 'Remover');b.clicked.connect(self.remove_load)
-        btn.addWidget(new_load);btn.addWidget(a);btn.addWidget(b);fields.addRow(btn)
-        col.addWidget(nodal)
-        self.load_note=QLabel('Forças explícitas por nó. Para ações superficiais, lineares e vento, acesse Ações gerais.');self.load_note.setWordWrap(True)
-        col.addWidget(self.load_note)
-        self._add_inspector_page(tab,'Cargas')
+        self._add_inspector_page(self.loads_tab, 'Cargas nodais')
 
     def _build_results_tab(self):
         tab=QWidget();col=QVBoxLayout(tab)
@@ -530,6 +608,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self._cad_buttons[command].setEnabled(not visible)
         self.snap.setEnabled(not visible)
         self.grid.setEnabled(not visible)
+        self.forces_button.setEnabled(not visible)
+        self.force_bar.setVisible(self.view.show_forces and not visible)
 
     def _sync_view3d(self, *, fit=False):
         if self._view3d is not None and self.mode_3d.isChecked():
@@ -538,7 +618,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _shortcuts(self):
         for key,func in [('Ctrl+N',self.new),('Ctrl+O',self.open),('Ctrl+S',self.save),
                          ('Ctrl+Z',self.undo),('Ctrl+Y',self.redo),('F5',self.calculate),
-                         ('Delete',self.delete_selected),('F',self.fit),
+                         ('Delete',self._delete_focused_selection),('F',self.fit),
                          ('Esc',lambda:self.choose_tool('select')),('Ctrl+0',self.focus_button.click)]:
             action=QAction(self);action.setShortcut(QKeySequence(key));action.triggered.connect(func);self.addAction(action)
 
@@ -581,10 +661,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.case_id=previous if previous in options else next(iter(options),None)
             if self.case_id:self.cases.setCurrentText(self.case_id)
             self.cases.blockSignals(False)
-            self.load_case.blockSignals(True);self.load_case.clear()
-            self.load_case.addItems([x['id'] for x in project.get('load_cases',[]) if x.get('kind')=='nodal'])
-            self.load_case.blockSignals(False)
-            self.load_node.clear();self.load_node.addItems([n.id for n in model.nodes]+[n['id'] for n in project.get('cad_drafts',[])])
+            self._populate_load_choices()
             geo=project.get('geometry',{})
             for key,field in self.geom_fields.items():
                 field.blockSignals(True);field.setValue(float(geo.get(key,0)));field.blockSignals(False)
@@ -623,6 +700,14 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def on_case(self,text):
         if self._refreshing:return
+        index = self.load_case.findText(text)
+        if index >= 0 and index != self.load_case.currentIndex():
+            with QSignalBlocker(self.load_case):
+                self.load_case.setCurrentIndex(index)
+            self.refresh_load_table()
+        if (self.info_tabs.currentWidget() is self._inspector_pages.get(self.actions_tab)
+                and self.action_case.findText(text) >= 0):
+            self.action_case.setCurrentText(text)
         self.case_id=text;self.view.render(self.session,self.case_id)
         self.refresh_result_table()
         self._sync_view3d()
@@ -631,11 +716,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if self._refreshing:return
         selected=[item.data(0,Qt.ItemDataRole.UserRole) for item in self.tree.selectedItems()]
         selected = [entry for entry in selected if entry]
+        if self._nodal_editor_active():
+            self.clear_load_selection()
         self._set_canvas_selection(selected)
         self._update_selection(selected)
 
     def on_scene_selected(self,selected):
         if self._refreshing or selected == self._selected:return
+        if self._nodal_editor_active():
+            self.clear_load_selection()
         self._update_selection(selected)
 
     def _set_canvas_selection(self, selected):
@@ -648,6 +737,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def _update_selection(self, selected, *, show_properties=True):
         self._selected=selected
+        if self._nodal_editor_active():
+            self._follow_load_selection()
+            show_properties = False
         with QSignalBlocker(self.tree):
             self.tree.clearSelection()
             for key in selected:
@@ -671,7 +763,6 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 n=nodes[id];self.node_id.setText(id);self.node_x.setValue(n.x);self.node_y.setValue(n.y)
                 ux,uy=self.session.model.supports.get(id,(False,False))
                 self.support_x.setChecked(ux);self.support_y.setChecked(uy)
-                self.load_node.setCurrentText(id)
                 self.selection_label.setText(f'Nó {id}  |  X={n.x:.2f} mm  Y={n.y:.2f} mm')
                 if show_properties:self.info_tabs.setCurrentIndex(1)
         else:
@@ -764,55 +855,172 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             if name in [x['id'] for x in p['load_cases']]:raise ValueError('ID já existe')
             p['load_cases'].append({'id':name,'name':name,'kind':'nodal','loads':[]})
         except Exception as exc:QMessageBox.warning(self,'Caso nodal',str(exc));return
-        if self._apply(p,'Caso de carga adicionado'):self.load_case.setCurrentText(name)
+        if self._apply(p,'Caso de carga adicionado'):
+            self.open_nodal_loads()
+            self.load_case.setCurrentText(name)
 
-    def clear_load_selection(self):
-        self.load_table.clearSelection();self.load_table.setCurrentCell(-1,-1)
-        self.fx.setValue(0);self.fy.setValue(0)
 
-    def load_row_selected(self):
-        row=self.load_table.currentRow()
-        if row<0:return
-        cid=self.load_case.currentText()
-        case=next((x for x in self.session.project.get('load_cases',[]) if x['id']==cid),None)
-        if case and row<len(case.get('loads',[])):
-            r=case['loads'][row];self.load_node.setCurrentText(r['node'])
-            self.fx.setValue(r['fx']);self.fy.setValue(r['fy']);self.force_unit.setCurrentText(r['force_unit'])
+    def open_nodal_loads(self):
+        if self.mode_3d.isChecked():
+            self.set_3d_visible(False)
+        if self.focus_button.isChecked():
+            self._set_drawing_only(False)
+        self.choose_tool('select')
+        self._show_inspector(self.loads_tab)
+        self.refresh_load_table()
+        self._show_load_case(self.load_case.currentText())
 
-    def add_load(self):
-        cid=self.load_case.currentText()
-        if not cid:
-            QMessageBox.information(self,'Cargas','Crie primeiro um caso de carga nodal.');return
-        try:
-            case=next(x for x in self.session.project['load_cases'] if x['id']==cid)
-            row=self.load_table.currentRow();idx=row if row>=0 and row<len(case['loads']) else None
-            p=deepcopy(self.session.project)
-            target=next(x for x in p['load_cases'] if x['id']==cid)
-            load={'node':self.load_node.currentText(),'fx':self.fx.value(),'fy':self.fy.value(),
-                  'force_unit':self.force_unit.currentText()}
-            if idx is None:target['loads'].append(load)
-            else:target['loads'][idx]=load
-        except Exception as exc:QMessageBox.warning(self,'Carga nodal',str(exc));return
-        if self._apply(p,'Carga nodal alterada'):
+    def _nodal_editor_active(self):
+        return self.info_tabs.currentWidget() is self._inspector_pages.get(self.loads_tab)
+
+    def _populate_load_choices(self):
+        case = self.case_id if self.load_case.findText(self.case_id or '') >= 0 else self.load_case.currentText()
+        with QSignalBlocker(self.load_case):
+            self.load_case.clear()
+            self.load_case.addItems([item['id'] for item in self.session.nodal_cases()])
+            if self.load_case.findText(case) >= 0:
+                self.load_case.setCurrentText(case)
+        node = self.load_node.currentText()
+        with QSignalBlocker(self.load_node):
+            self.load_node.clear()
+            self.load_node.addItems([node.id for node in self.session.model.nodes])
+            self.load_node.setCurrentIndex(self.load_node.findText(node))
+
+    def _reset_load_fields(self):
+        with QSignalBlocker(self.load_case), QSignalBlocker(self.load_node):
+            self.load_case.setCurrentIndex(-1)
+            self.load_node.setCurrentIndex(-1)
+        self.fx.setValue(0)
+        self.fy.setValue(0)
+        self.force_unit.setCurrentIndex(0)
+
+    def _load_case_changed(self, case):
+        self.refresh_load_table()
+        if self._nodal_editor_active():
+            self._show_load_case(case)
+
+    def _show_load_case(self, case):
+        if not case:
+            return
+        self.cases.setCurrentText(case)
+        if not self.view.show_forces:
             self._set_overlay('show_forces', True)
 
-    def remove_load(self):
-        cid=self.load_case.currentText();row=self.load_table.currentRow()
-        if row<0:return
-        p=deepcopy(self.session.project)
-        case=next((x for x in p['load_cases'] if x['id']==cid),None)
-        if not case or row>=len(case.get('loads',[])):return
-        case['loads'].pop(row);self._apply(p,'Carga removida')
+    def _selected_load_nodes(self):
+        return sorted(node for kind, node in self._selected
+                      if kind == 'node' and self.load_node.findText(node) >= 0)
 
-    def refresh_load_table(self,*_):
-        if not hasattr(self,'load_table'):return
-        cid=self.load_case.currentText();case=next((x for x in self.session.project.get('load_cases',[]) if x['id']==cid),None)
-        rows=case.get('loads',[]) if case else []
-        self.load_table.blockSignals(True);self.load_table.setRowCount(len(rows))
-        for i,r in enumerate(rows):
-            for j,key in enumerate(('node','fx','fy','force_unit')):
-                val=r.get(key,'');self.load_table.setItem(i,j,QTableWidgetItem(f'{val:.2f}' if isinstance(val,float) else str(val)))
-        self.load_table.blockSignals(False)
+    def _follow_load_selection(self):
+        nodes = self._selected_load_nodes()
+        if nodes and self.load_table.currentRow() < 0:
+            self.load_node.setCurrentText(nodes[0])
+        self._refresh_load_controls()
+
+    def _refresh_load_controls(self, *_):
+        case = self.load_case.currentText()
+        editing_row = self.load_table.currentRow() >= 0
+        has_force = bool(self.fx.value() or self.fy.value())
+        self.commit_load.setText('Salvar edição' if editing_row else 'Adicionar')
+        self.commit_load.setEnabled(bool(case and self.load_node.currentText() and (has_force or editing_row)))
+        self.delete_load.setEnabled(editing_row)
+        self.new_load.setEnabled(editing_row)
+        count = len(self._selected_load_nodes())
+        self.batch_load.setText(f'Aplicar a {count} nós selecionados' if count > 1
+                                else 'Aplicar aos nós selecionados')
+        self.batch_load.setEnabled(bool(case and count > 1 and has_force and not editing_row))
+        if not case:
+            note = 'Crie um caso nodal para começar.'
+        elif editing_row:
+            note = f'Editando a parcela {self.load_table.currentRow() + 1}.'
+        else:
+            note = 'Clique num nó ou use Ctrl+clique para selecionar vários.'
+        self.load_note.setText(note)
+
+    def clear_load_selection(self):
+        with QSignalBlocker(self.load_table):
+            self.load_table.clearSelection()
+            self.load_table.setCurrentCell(-1, -1)
+        self._follow_load_selection()
+
+    def _active_nodal_case(self):
+        return next((case for case in self.session.nodal_cases()
+                     if case['id'] == self.load_case.currentText()), {})
+
+    def load_row_selected(self, row, *_):
+        case = self._active_nodal_case()
+        rows = case.get('loads', [])
+        if 0 <= row < len(rows):
+            load = rows[row]
+            node = str(load['node'])
+            self.load_node.setCurrentIndex(self.load_node.findText(node))
+            self.fx.setValue(float(load.get('fx', 0)))
+            self.fy.setValue(float(load.get('fy', 0)))
+            self.force_unit.setCurrentText(load.get('force_unit', case.get('force_unit', 'kgf')))
+            selection = [('node', node)]
+            self._set_canvas_selection(selection)
+            self._update_selection(self.view.selected_ids(), show_properties=False)
+        self._refresh_load_controls()
+
+    def add_load(self):
+        row = self.load_table.currentRow()
+        self._save_nodal_loads([self.load_node.currentText()], index=row if row >= 0 else None)
+
+    def add_load_batch(self):
+        nodes = self._selected_load_nodes()
+        if self.batch_load.isEnabled() and len(nodes) > 1:
+            self._save_nodal_loads(nodes)
+
+    def _save_nodal_loads(self, nodes, *, index=None):
+        case = self.load_case.currentText()
+        try:
+            updated = workflow.update_nodal_loads(
+                self.session.project, self.session.model, case, nodes,
+                self.fx.value(), self.fy.value(), self.force_unit.currentText(), index,
+            )
+        except (ValueError, IndexError) as error:
+            QMessageBox.warning(self, 'Carga nodal', str(error))
+            return
+        message = (f'Carga adicionada a {len(nodes)} nós' if len(nodes) > 1
+                   else 'Carga nodal atualizada' if index is not None else 'Carga nodal adicionada')
+        if self._apply(updated, message):
+            self._show_load_case(case)
+            if index is not None:
+                self.load_table.selectRow(index)
+
+    def remove_load(self):
+        cid = self.load_case.currentText()
+        row = self.load_table.currentRow()
+        if row < 0:
+            return
+        updated = deepcopy(self.session.project)
+        case = next((entry for entry in updated['load_cases'] if entry['id'] == cid), None)
+        if case and row < len(case.get('loads', [])):
+            case['loads'].pop(row)
+            self._apply(updated, 'Carga removida')
+
+    def _delete_focused_selection(self):
+        if self._nodal_editor_active():
+            focus = self.focusWidget()
+            if focus is self.load_table or (focus is not None and self.load_table.isAncestorOf(focus)):
+                self.remove_load()
+        else:
+            self.delete_selected()
+
+    def refresh_load_table(self):
+        case = self._active_nodal_case()
+        rows = case.get('loads', [])
+        with QSignalBlocker(self.load_table):
+            self.load_table.setRowCount(len(rows))
+            for index, load in enumerate(rows):
+                values = (str(load['node']), str(load.get('fx', 0)), str(load.get('fy', 0)),
+                          load.get('force_unit', case.get('force_unit', 'kgf')))
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    if column in (1, 2):
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    self.load_table.setItem(index, column, item)
+        self.clear_load_selection()
+
 
     def calculate(self):
         try:
@@ -869,6 +1077,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _set_overlay(self, flag, visible):
         setattr(self.view, flag, visible)
         self._overlay_buttons[flag].setChecked(visible)
+        if flag == 'show_forces':
+            self.forces_button.setChecked(visible)
         self.view.render(self.session, self.case_id)
     def change_vertical(self):
         values=[1.,1.5,2.,3.,4.];current=self.view._vertical
@@ -893,6 +1103,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if not self._maybe_save():return
         self.session=Session();self.undo_stack.clear();self.redo_stack.clear();self.filepath=None
         self._selected = []
+        self._reset_load_fields()
         self._dirty=False;self.refresh(fit=True)
     def open(self):
         if not self._maybe_save():return
@@ -902,6 +1113,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         except Exception as exc:QMessageBox.warning(self,'Abrir',str(exc));return
         self.session=new_session;self.filepath=Path(name);self.undo_stack.clear();self.redo_stack.clear()
         self._selected = []
+        self._reset_load_fields()
         self._dirty=False;self.refresh(fit=True)
     def save(self):
         if self.filepath is None:return self.save_as()
@@ -962,7 +1174,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         groups={
             'Concepção':('Geometria','Telha / modulação','Perfis'),
             'Modelagem':('Propriedades','Estabilidade'),
-            'Ações':('Cargas','Ações gerais','Combinações'),
+            'Ações':('Cargas nodais','Ações gerais','Combinações'),
             'Análise':('Resultados','Alternativas','Diagnóstico','Inspeção 3D'),
         }
         assigned=set()
@@ -991,6 +1203,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if isinstance(index, int):
             if self.info_tabs.tabText(index) == 'Inspeção 3D':
                 self.open_3d()
+            elif self.info_tabs.widget(index) is self._inspector_pages[self.loads_tab]:
+                self.open_nodal_loads()
+            elif self.info_tabs.widget(index) is self._inspector_pages[self.actions_tab]:
+                self.open_general_actions()
             else:
                 self.info_tabs.setCurrentIndex(index)
 
