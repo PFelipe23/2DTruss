@@ -7,14 +7,16 @@ from __future__ import annotations
 from copy import deepcopy
 from queue import Queue, Empty
 from threading import Thread
-from PySide6.QtCore import Qt,QTimer
+from PySide6.QtCore import Qt,QSignalBlocker,QTimer
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGroupBox,QFormLayout,QLabel,
     QComboBox,QPushButton,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
     QHeaderView,QInputDialog,QMessageBox,QLineEdit,QTreeWidget,QTreeWidgetItem,
     QCheckBox,QAbstractItemView)
 from desktop import workflow
 from poe_truss.model import GROUPS,geometry_diagnostics
+from poe_truss.materials import STEEL_GRADES
 from poe_truss.search import suggest_geometry
+from .profile_picker import ProfilePicker
 
 
 def field(value=0,low=0,high=1e8,dec=2,step=1):
@@ -43,16 +45,29 @@ class WorkflowMixin:
 
     def _build_profiles_tab(self):
         tab=QWidget();v=QVBoxLayout(tab)
-        v.addWidget(QLabel('Perfis por grupo · propriedades do catálogo'))
         box=QGroupBox('Seção do grupo');f=QFormLayout(box)
         self.section_group=QComboBox();self.section_group.addItems(GROUPS)
         self.section_group.currentTextChanged.connect(self._populate_section)
-        self.section_profile=QComboBox();self.section_profile.addItems(sorted(self.session.catalog))
-        self.section_count=QSpinBox();self.section_count.setRange(1,2)
-        f.addRow('Grupo',self.section_group);f.addRow('Perfil',self.section_profile)
-        f.addRow('Componentes',self.section_count)
-        f.addRow(row_buttons(('Aplicar à família',self._apply_section)))
+        self.section_picker = ProfilePicker()
+        self.section_picker.changed.connect(self._apply_section)
+        f.addRow('Grupo', self.section_group)
+        f.addRow(self.section_picker)
+        self.section_details = QLabel()
+        self.section_details.setWordWrap(True)
+        f.addRow(self.section_details)
         v.addWidget(box)
+        steel_box = QGroupBox('Aço do projeto')
+        steel_layout = QVBoxLayout(steel_box)
+        self.steel_grade = QComboBox()
+        self.steel_grade.addItem('Propriedades do arquivo', None)
+        for grade_id, grade in STEEL_GRADES.items():
+            self.steel_grade.addItem(f'{grade.name} · {grade.standard}', grade_id)
+        self.steel_grade.activated.connect(self._apply_steel)
+        steel_layout.addWidget(self.steel_grade)
+        self.steel_details = QLabel()
+        self.steel_details.setWordWrap(True)
+        steel_layout.addWidget(self.steel_details)
+        v.addWidget(steel_box)
         box=QGroupBox('Modulação geométrica');f=QFormLayout(box)
         self.purlin_step=field(1.2,0.1,20,3,.1)
         self.angle_min=field(45,0,90,1,1);self.angle_max=field(60,0,90,1,1)
@@ -69,7 +84,6 @@ class WorkflowMixin:
         rf.addRow('Massa da telha (kg/m²)',self.roof_mass)
         rf.addRow(row_buttons(('Registrar telha + ação G2',self._apply_roof)))
         v.addWidget(roof)
-        self.section_details=QLabel();self.section_details.setWordWrap(True);v.addWidget(self.section_details)
         v.addStretch(1)
         self.profile_tab=tab;self._add_inspector_page(tab,'Perfis')
 
@@ -77,20 +91,52 @@ class WorkflowMixin:
         g=self.section_group.currentText() if hasattr(self,'section_group') else ''
         if not g:return
         spec=self.session.project.get('sections',{}).get(g,{})
-        profile=spec.get('profile','')
-        if profile and profile in self.session.catalog:
-            self.section_profile.setCurrentText(profile)
-            p=self.session.catalog[profile]
+        self.section_picker.set_section(self.session.catalog, spec)
+        p = self.session.catalog.get(spec.get('profile'))
+        if p is not None:
             self.section_details.setText(f'{p.family}  |  A = {p.area_mm2:.2f} mm²  |  '
                 f'massa = {p.mass_kg_m:.3f} kg/m\nOrigem: {p.origin}\nQualidade: {p.quality}')
-        self.section_count.setValue(int(spec.get('count',1)))
+        else:
+            self.section_details.clear()
 
-    def _apply_section(self):
+    def _apply_section(self, profile, count):
+        self.assign_section(self.section_group.currentText(), profile, count)
+
+    def assign_section(self, group, profile, count):
+        current = self.session.project.get('sections', {}).get(group, {})
+        if ('model_override' not in self.session.project
+                and current.get('profile') == profile and current.get('count', 1) == count):
+            return
         try:
             p=workflow.update_section(self.session.project,self.session.model,self.session.catalog,
-                self.section_group.currentText(),self.section_profile.currentText(),self.section_count.value())
+                group, profile, count)
             self._apply(p,'Perfis atualizados; peso próprio será recalculado na próxima análise')
         except Exception as e:QMessageBox.warning(self,'Perfis',str(e))
+
+    def _populate_steel(self):
+        material = self.session.project.get('material', {})
+        grade = STEEL_GRADES.get(material.get('grade_id'))
+        if grade and any(material.get(key) != value for key, value in
+                         [('E_MPa', grade.E), ('fy_MPa', grade.fy), ('fu_MPa', grade.fu)]):
+            grade = None
+        with QSignalBlocker(self.steel_grade):
+            index = self.steel_grade.findData(material['grade_id']) if grade else 0
+            self.steel_grade.setCurrentIndex(index)
+        fu = f"{material['fu_MPa']} MPa" if 'fu_MPa' in material else 'em aberto'
+        text = (f"E = {material.get('E_MPa', 200000)} MPa · "
+                f"fy = {material.get('fy_MPa', 250)} MPa · fu {fu}")
+        if grade:
+            text += f'\n{grade.product} · {grade.source}'
+        self.steel_details.setText(text)
+
+    def _apply_steel(self, _index):
+        grade_id = self.steel_grade.currentData()
+        if grade_id is None:
+            self._populate_steel()
+            return
+        updated = workflow.update_steel(self.session.project, grade_id)
+        if updated != self.session.project:
+            self._apply(updated, 'Aço do projeto atualizado')
 
     def _apply_roof(self):
         try:
@@ -397,7 +443,7 @@ class WorkflowMixin:
         self.search_case.clear()
         self.search_case.addItems([c['id'] for c in self.session.project.get('combinations',[])]+[
             c['id'] for c in self.session.project.get('load_cases',[])])
-        self._populate_section();self._populate_stability()
+        self._populate_section();self._populate_steel();self._populate_stability()
         geo=self.session.project.get('geometry',{})
         self.purlin_step.setValue(float(geo.get('purlin_max_m',1.2)))
         self.angle_min.setValue(float(geo.get('angle_min_deg',45)))

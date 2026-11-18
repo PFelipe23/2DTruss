@@ -15,14 +15,24 @@ class Camera:
 
 def project(point, camera:Camera):
     x,y,z=(float(v) for v in point)
-    if not all(isfinite(v) for v in (x,y,z,camera.yaw_deg,camera.elevation_deg)):
+    if not all(isfinite(v) for v in (x,y,z)):
         raise ValueError('Projeção 3D requer valores finitos')
-    a,b=radians(camera.yaw_deg),radians(camera.elevation_deg)
-    xr=x*cos(a)-z*sin(a)
-    zr=x*sin(a)+z*cos(a)
-    yy=y*cos(b)-zr*sin(b)
-    depth=y*sin(b)+zr*cos(b)
-    return xr,-yy,depth
+    return camera_projection(camera)((x, y, z))
+
+
+def camera_projection(camera: Camera):
+    """Precalcula a rotação para projeção em lote de vértices já validados."""
+    a, b = radians(camera.yaw_deg), radians(camera.elevation_deg)
+    if not isfinite(a) or not isfinite(b):
+        raise ValueError('A câmera requer ângulos finitos')
+    ca, sa, cb, sb = cos(a), sin(a), cos(b), sin(b)
+
+    def transform(point):
+        x, y, z = point
+        zr = x * sa + z * ca
+        return x * ca - z * sa, zr * sb - y * cb, y * sb + zr * cb
+
+    return transform
 
 
 def member_prism(node_a,node_b, thickness=60., depth=160.):

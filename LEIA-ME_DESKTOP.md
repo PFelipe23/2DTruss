@@ -74,7 +74,7 @@ O esquema persistente continua **`poe-truss-python/v1`**. Um campo opcional `mod
 
 - O roteiro manual de interface nas resoluções-alvo permanece na [documentação de revisão 3D](docs/REDESENHO_UI_E_PERFIS_3D_V09.md).
 - O núcleo Python, a importação DXF com arquivos reais gerados para teste, a leitura/escrita JSON e o cálculo estrutural pós-importação foram testados.
-- DWG com ODA real e executável Windows não foram testados nesta infraestrutura.
+- A importação DWG com o conversor ODA exige teste em uma instalação do conversor.
 - Sem verificação normativa completa NBR 14762, NBR 8800, estabilidade global fora do plano ou aprovação ELU. O uso continua exploratório/experimental.
 
 ## Fluxo de projeto integrado na interface nativa
@@ -83,26 +83,23 @@ A aba **Perfis** altera os perfis por grupo, a quantidade de componentes, a modu
 
 A aba **Combinações** permite criar, excluir e editar fatores assinados por caso; não calcula coeficientes normativos automaticamente. A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções, sem impedir valores manuais fora da pesquisa. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
 
-## Vista 3D — seções extrudadas (revisão acumulativa v0.1)
+## Área de trabalho
 
-**Exibição > Vista 3D** abre uma janela não modal. O programa lê as dimensões U, UE e L disponíveis no catálogo e extruda o **contorno da seção aberta** no eixo da barra, com orientação e arranjos simples/duplos configuráveis. Não usa mais os prismas cheios genéricos da versão anterior.
-
-- Arraste **esquerdo**: girar; roda: zoom; **clique direito** sobre uma peça: informações da barra. O visor traz modos sólido/aramado e escala de seção **1×–8×** (padrão 3×), exclusivamente gráfica; OBJ é exportado em escala real 1×.
-- Presets isométrica, frontal XY, perfil lateral e superior; cor por grupo, família ou sinal da força axial.
-- Aba **Arranjo**: componentes simples/duplos, costas a costas / frente a frente / mesma orientação, rotação e distância entre centroides (mm).
-- Aba **Arranjo** traz prévia ampliada da seção efetivamente desenhada.
-- O botão **Aplicar ao projeto** atualiza o JSON, recalcula a geometria do modelo 2D e invalida resultados anteriores.
-- O botão **Exportar malha OBJ** gera malhas fechadas em mm para conferir em visualizadores externos.
-- Perfis duplos sem distanciamento explicitado apresentam um aviso; a separação de 6 mm nesse caso é **puramente gráfica**.
-- Os perfis laminados com dimensões incompletas usam geometrias **idealizadas** e avisos. Sem raios de concordância ou espessura diferenciada de mesa. Se a área desenhada divergir significativamente da área utilizada no solver, um aviso identifica a discrepância.
-
-A visualização continua **geométrica**, não uma análise 3D ou verificação normativa. A versão atual renderiza faces por ordenação de profundidade sem z-buffer; interseções visuais complexas não estão homologadas para análise de interferências.
-
-A barra superior reúne arquivos, análise e a vista 3D. Use as abas da faixa de comandos para criar e editar o modelo, atribuir ações e controlar o que aparece no desenho. À esquerda, **Modelo** filtra nós e barras por ID ou grupo, e **Tarefas** abre as páginas do inspetor à direita.
+A barra superior reúne arquivos, análise e o botão **2D | 3D**. Use as abas da faixa de comandos para criar e editar o modelo, atribuir ações e controlar o que aparece no desenho. À esquerda, **Modelo** filtra nós e barras por ID ou grupo, e **Tarefas** abre as páginas do inspetor à direita.
 
 A barra do desenho oferece seleção, movimentação, pan, enquadramento e escolha de caso ou combinação. A barra inferior mostra as coordenadas em milímetros, o estado da análise e os controles independentes de grade e snap. **Exibição → IDs dos nós** liga os identificadores no desenho.
 
 `F5` calcula e abre a tabela inferior. Clique numa linha para inspecionar a barra ou use **Detalhar** para consultar filtros e envoltórias. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
+
+## Perfis, aço e vista 3D
+
+Em **Modelagem → Perfis**, escolha o grupo, a biblioteca e a bitola. A seleção é aplicada ao grupo com quantidade **1**. Aumente a quantidade após escolher a bitola para criar uma seção dupla. Projetos abertos mantêm os perfis e as quantidades gravados.
+
+Em **2D | 3D**, a aba **Arranjo** permite editar o mesmo grupo. Um clique direito numa barra seleciona seu grupo no painel. Arraste com o botão esquerdo para girar, use o botão central para deslocar e a roda para aproximar. A troca de bitola, a geometria confirmada no inspetor e os ajustes de arranjo atualizam a vista aberta. Use `F5` para recalcular depois de modificar o projeto.
+
+Em **Exibição** no painel 3D, ajuste cor, modo sólido ou aramado e escala de seção. **Exportar OBJ** gera malhas em milímetros e escala real, independentemente do exagero visual. Seções duplas com espaçamento nulo têm uma separação gráfica de 6 mm. O visor ordena faces por profundidade para inspeção visual. Use o OBJ em um visualizador adequado para examinar interseções.
+
+O seletor **Aço do projeto** aplica propriedades ao material uniforme do modelo. Consulte a [procedência dos perfis e aços](docs/PERFIS_E_ACOS.md) para escolher a biblioteca e conferir as propriedades de referência.
 
 ## Limites ainda presentes
 

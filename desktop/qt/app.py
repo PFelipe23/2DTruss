@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBo
     QTreeWidget,QTreeWidgetItem,QTabWidget,QFormLayout,QGroupBox,QLineEdit,QFileDialog,
     QMessageBox,QInputDialog,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,
     QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QGraphicsLineItem,QFrame,QSizePolicy,QStyle,
-    QButtonGroup,QScrollArea)
+    QButtonGroup,QScrollArea,QStackedWidget)
 
 from desktop.bridge import Session,load_project,write_project
 from desktop import editing,cad_io
@@ -24,7 +24,7 @@ from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html,ftool_
 from poe_truss.version import APP_NAME, TAG
 from .viewport import TrussView
 from .workflow_panels import WorkflowMixin
-from .view3d import Truss3DDialog
+from .view3d import Truss3DView
 from .ui_theme import STYLE,workspace_palette
 
 APP_TITLE=f'{APP_NAME} {TAG}'
@@ -181,7 +181,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
         self.center_split = QSplitter(Qt.Orientation.Vertical)
         self.center_split.setChildrenCollapsible(False)
-        self.center_split.addWidget(self.view)
+        self.canvas_stack = QStackedWidget()
+        self.canvas_stack.addWidget(self.view)
+        self.center_split.addWidget(self.canvas_stack)
         center_layout.addWidget(self.center_split, 1)
         self.results_panel = QWidget()
         result_layout = QVBoxLayout(self.results_panel)
@@ -286,7 +288,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.focus_button = _button('Só desenho', self._set_drawing_only, checkable=True)
         self.focus_button.setToolTip('Recolher ou restaurar os painéis (Ctrl+0)')
         line.addWidget(self.focus_button)
-        line.addWidget(_button('Vista 3D', self.open_3d))
+        self.mode_3d = _button('2D | 3D', self.set_3d_visible, checkable=True)
+        self.mode_3d.setToolTip('Alternar entre desenho 2D e inspeção 3D')
+        line.addWidget(self.mode_3d)
         run = _button('Calcular', self.calculate)
         run.setObjectName('calculateButton')
         run.setToolTip('Calcular o modelo (F5)')
@@ -399,8 +403,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             ('height_m','Altura (m)',1.,.05,50.,5,.05),('rise_m','Desnível (m)',.5,0.,30.,5,.05)]
         for key,label,default,minimum,maximum,decimals,step in definitions:
             widget=_spin(default,minimum,maximum,decimals,step);self.geom_fields[key]=widget
-            widget.editingFinished.connect(self.change_geometry);form.addRow(label,widget)
-        self.panels=QSpinBox();self.panels.setRange(2,40);self.panels.editingFinished.connect(self.change_geometry)
+            widget.setKeyboardTracking(False)
+            widget.valueChanged.connect(self.change_geometry);form.addRow(label,widget)
+        self.panels=QSpinBox();self.panels.setRange(2,40)
+        self.panels.setKeyboardTracking(False)
+        self.panels.valueChanged.connect(self.change_geometry)
         form.addRow('Painéis',self.panels)
         self.shape=QComboBox();self.shape.addItems(['parallel','single','gable','trapezoid'])
         self.shape.currentTextChanged.connect(self.change_geometry);form.addRow('Forma',self.shape)
@@ -493,26 +500,33 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._add_inspector_page(tab,'Resultados')
 
     def open_3d(self):
-        """Janela não modal: visualização tridimensional, sem solver 3D."""
-        if self._view3d is not None and self._view3d.isVisible():
-            self._view3d.raise_();self._view3d.activateWindow();return
-        dialog = Truss3DDialog(self.session, self.case_id, self)
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        dialog.finished.connect(self._view3d_closed)
-        self._view3d = dialog
-        dialog.show()
+        self.set_3d_visible(True)
 
-    def _view3d_closed(self, _result):
-        self._view3d = None
+    def set_3d_visible(self, visible):
+        self.mode_3d.setChecked(visible)
+        if visible:
+            if self._view3d is None:
+                self._view3d = Truss3DView(self.session, self.case_id, self)
+                self.canvas_stack.addWidget(self._view3d)
+                self._add_inspector_page(self._view3d.controls, 'Inspeção 3D')
+                self.setup_task_tree()
+            self.canvas_stack.setCurrentWidget(self._view3d)
+            self._sync_view3d()
+            self._show_inspector(self._view3d.controls)
+            self.status('Arraste para orbitar · botão central desloca · clique direito inspeciona a barra')
+        else:
+            self.canvas_stack.setCurrentWidget(self.view)
+            if self._view3d and self.info_tabs.currentWidget() == self._inspector_pages[self._view3d.controls]:
+                self.info_tabs.setCurrentIndex(0)
+            self.view.set_tool(self.view.tool)
+        for command in ('select', 'move', 'pan', 'node', 'bar', 'split'):
+            self._cad_buttons[command].setEnabled(not visible)
+        self.snap.setEnabled(not visible)
+        self.grid.setEnabled(not visible)
 
-    def _sync_view3d(self):
-        dialog = self._view3d
-        if dialog is None:
-            return
-        if dialog.session is not self.session:
-            dialog.close()
-            return
-        dialog.refresh_model(self.case_id)
+    def _sync_view3d(self, *, fit=False):
+        if self._view3d is not None and self.mode_3d.isChecked():
+            self._view3d.refresh_model(self.session, self.case_id, fit=fit)
 
     def _shortcuts(self):
         for key,func in [('Ctrl+N',self.new),('Ctrl+O',self.open),('Ctrl+S',self.save),
@@ -589,10 +603,12 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.calc_badge.setObjectName('calcReady' if self.session.result else 'calcPending')
             self.calc_badge.style().unpolish(self.calc_badge);self.calc_badge.style().polish(self.calc_badge)
             self.setWindowTitle(APP_TITLE+('  *' if self._dirty else '')+(f'  — {self.filepath.name}' if self.filepath else ''))
-            self._sync_view3d()
+            self._sync_view3d(fit=fit)
         finally:self._refreshing=False
 
     def choose_tool(self,tool):
+        if self.mode_3d.isChecked():
+            self.set_3d_visible(False)
         self._cad_buttons[tool].setChecked(True)
         self.view.set_tool(tool)
         self._show_selection_controls()
@@ -722,7 +738,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         for key,widget in self.geom_fields.items():geo[key]=widget.value()
         geo['panels']=self.panels.value();geo['roof_shape']=self.shape.currentText()
         geo['truss_type']=self.topology.currentText()
-        self._apply(p,'Geometria paramétrica',fit=True)
+        if geo != self.session.project['geometry']:
+            self._apply(p,'Geometria paramétrica',fit=True)
 
     def revert_parametric(self):
         if QMessageBox.question(self,'Retornar ao paramétrico',
@@ -850,7 +867,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         values=[1.,1.5,2.,3.,4.];current=self.view._vertical
         nxt=values[(values.index(current)+1)%len(values)] if current in values else 1.
         self.view.set_vertical_factor(nxt);self.status(f'Escala vertical de exibição ×{nxt:g} (não afeta cálculos)')
-    def fit(self):self.view.fit()
+    def fit(self):
+        if self.mode_3d.isChecked():
+            self._view3d.fit()
+        else:
+            self.view.fit()
 
     def undo(self):
         if not self.undo_stack:return
@@ -935,7 +956,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             'Concepção':('Geometria','Telha / modulação','Perfis'),
             'Modelagem':('Propriedades','Estabilidade'),
             'Ações':('Cargas','Ações gerais','Combinações'),
-            'Análise':('Resultados','Alternativas','Diagnóstico'),
+            'Análise':('Resultados','Alternativas','Diagnóstico','Inspeção 3D'),
         }
         assigned=set()
         for title,labels in groups.items():
@@ -960,7 +981,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def task_clicked(self,item,column):
         index=item.data(0,Qt.ItemDataRole.UserRole)
-        if isinstance(index,int):self.info_tabs.setCurrentIndex(index)
+        if isinstance(index, int):
+            if self.info_tabs.tabText(index) == 'Inspeção 3D':
+                self.open_3d()
+            else:
+                self.info_tabs.setCurrentIndex(index)
 
     def update_task_selection(self,index):
         if index >= 0:

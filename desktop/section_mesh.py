@@ -1,8 +1,6 @@
-"""Malhas de inspeção 3D dos perfis U, UE e L.
+"""Malhas de inspeção 3D dos perfis U, UE, L, W, H e HP.
 
-Este módulo NÃO participa do solver. A geometria da seção é formada por paredes
-planas (sem raios); em perfis laminados a espessura da mesa não está no catálogo
-atual e usa-se, exclusivamente para VISUALIZAÇÃO, a espessura registrada da alma.
+Este módulo NÃO participa do solver. Os contornos têm paredes planas, sem raios.
 Unidades de armazenamento: mm. Sem dependências gráficas.
 """
 from __future__ import annotations
@@ -25,6 +23,7 @@ class ProfileShape:
     lip: float = 0.0
     source: str = ''
     note: str = ''
+    flange_thickness: float | None = None
 
 
 @dataclass(frozen=True)
@@ -51,7 +50,8 @@ def load_shape_catalog(path: str | Path) -> dict[str, ProfileShape]:
     with open(path, newline='', encoding='utf-8-sig') as f:
         for row in csv.DictReader(f, delimiter=';'):
             name, fam = row['perfil'], row['familia'].upper()
-            if not (fam.startswith('U') or fam.startswith('L')):
+            family = fam.split()[0]
+            if family not in {'U', 'UE', 'L', 'W', 'H', 'HP'}:
                 continue
             h, w, t = (_number(row[key]) for key in ('bw_mm', 'bf_mm', 't_mm'))
             lip = 0.
@@ -62,18 +62,29 @@ def load_shape_catalog(path: str | Path) -> dict[str, ProfileShape]:
                 if len(nums) < 4:
                     raise ValueError(f'UE sem largura de enrijecedor identificável: {name}')
                 lip = _number(nums[-2])
-            if 'LAMINADO' in fam:
-                note += ' Espessura de mesa aproximada pela espessura informada da alma; dimensões industriais não comprovadas.'
             if not (h > 2*t > 0 and w > t and (not lip or 0 < lip < h/2-2*t)):
                 raise ValueError(f'Dimensões incompatíveis para renderização: {name}')
-            result[name] = ProfileShape(name,fam,h,w,t,lip,row.get('origem',''),note)
+            tf = None
+            if family in {'W', 'H', 'HP'}:
+                tf = _number(row.get('tf_mm') or '')
+                if not 0 < 2 * tf < h:
+                    raise ValueError(f'Espessura de mesa incompatível: {name}')
+            elif fam.startswith('U') and 'LAMINADO' in fam:
+                note += ' Mesa inclinada representada com espessura igual à da alma.'
+            result[name] = ProfileShape(name,fam,h,w,t,lip,row.get('origem',''),note,tf)
     return result
 
 
 def section_polygon(shape: ProfileShape) -> tuple[tuple[float,float], ...]:
     """Contorno fechado simples (sem repetir o ponto inicial) no plano local u/v."""
     h,w,t = shape.height,shape.flange,shape.thickness
-    if shape.family.startswith('L'):
+    if shape.flange_thickness is not None:
+        tf = shape.flange_thickness
+        left, right = (w - t) / 2, (w + t) / 2
+        outline = ((0, 0), (w, 0), (w, tf), (right, tf), (right, h-tf),
+                   (w, h-tf), (w, h), (0, h), (0, h-tf), (left, h-tf),
+                   (left, tf), (0, tf))
+    elif shape.family.startswith('L'):
         outline = ((0,0),(w,0),(w,t),(t,t),(t,h),(0,h))
     elif shape.family.startswith('UE'):
         lip = shape.lip

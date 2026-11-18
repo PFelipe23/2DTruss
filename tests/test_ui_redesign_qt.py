@@ -11,6 +11,56 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_profiles_and_steel_update_the_active_3d_view(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            window.open_3d()
+            view = window._view3d
+            self.assertIs(window.canvas_stack.currentWidget(), view)
+            group = view.group.currentText()
+            self.assertEqual(view.profile_picker.count.value(), 2)
+            profile = 'W 150 x 13,0'
+            view.profile_picker.family.setCurrentText('W (laminado)')
+            view.profile_picker.profile.setCurrentText(profile)
+            view.profile_picker.profile.activated.emit(view.profile_picker.profile.currentIndex())
+
+            section = window.session.project['sections'][group]
+            self.assertEqual(section, {'profile': profile, 'count': 1})
+            members = [member for member in window.session.model.members if member.group == group]
+            self.assertTrue(members)
+            for member in members:
+                self.assertAlmostEqual(member.area, 1660)
+            self.assertTrue(all(view._member_meta[member.id]['profile'] == profile for member in members))
+
+            view.rotation.setValue(90)
+            self.assertEqual(window.session.project['section_arrangements'][group]['rotation_deg'], 90)
+            self.assertEqual(view._mesh_revision, window.session.revision)
+
+            revision = window.session.revision
+            window.geom_fields['span_m'].setValue(window.geom_fields['span_m'].value() + 1)
+            self.assertGreater(window.session.revision, revision)
+            self.assertEqual(view._mesh_revision, window.session.revision)
+
+            window.calculate()
+            self.assertTrue(view.axial())
+            window.steel_grade.setCurrentIndex(window.steel_grade.findData('a572gr50'))
+            window.steel_grade.activated.emit(window.steel_grade.currentIndex())
+            self.assertEqual(window.session.project['material']['fy_MPa'], 345)
+            self.assertIsNone(window.session.result)
+            self.assertFalse(view.axial())
+            window.set_3d_visible(False)
+            self.assertIs(window.canvas_stack.currentWidget(), window.view)
+            self.assertTrue(all(window.view.selection_item('member', member.id) for member in members))
+        finally:
+            window._dirty = False
+            window.close()
+
     def test_workspace_selection_results_and_drawing_only(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import Qt
@@ -78,7 +128,7 @@ class QtRedesignSmoke(unittest.TestCase):
             if window._view3d:window._view3d.close()
             window.close()
 
-    def test_3d_closes_when_project_changes(self):
+    def test_3d_rebinds_when_project_changes(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtWidgets import QApplication
         from desktop.bridge import ROOT, Session
@@ -86,6 +136,7 @@ class QtRedesignSmoke(unittest.TestCase):
 
         app = QApplication.instance() or QApplication([])
         window = DesktopApp(Session())
+        window.show()
         try:
             path = ROOT / 'examples' / 'FTool_A02_trelica_triangular.json'
             for replace_project in (window.new, window.open):
@@ -96,7 +147,9 @@ class QtRedesignSmoke(unittest.TestCase):
                     with patch('PySide6.QtWidgets.QFileDialog.getOpenFileName',
                                return_value=(str(path), '')):
                         replace_project()
-                    self.assertIsNone(window._view3d)
+                    self.assertIs(window.canvas_stack.currentWidget(), window._view3d)
+                    self.assertIs(window._view3d.session, window.session)
+                    self.assertFalse(window._view3d.axial())
                     self.assertIsNone(window.session.result)
 
             window.open_3d()

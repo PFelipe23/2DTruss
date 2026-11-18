@@ -6,6 +6,7 @@ validado posteriormente por Session.update_project (modelo/solver existentes).
 from __future__ import annotations
 from copy import deepcopy
 from math import isfinite
+from poe_truss.materials import STEEL_GRADES
 from poe_truss.model import GROUPS
 
 LOAD_KINDS = ('self_weight','surface','line','nodal')
@@ -33,6 +34,17 @@ def update_section(project, model, catalog, group, profile, count):
     p.pop('external_resistances',None)
     p.setdefault('stability',{}).pop('members',None) # não reutilizar K/L da seção antiga
     return p
+
+
+def update_steel(project, grade_id):
+    grade = STEEL_GRADES[grade_id]
+    updated = deepcopy(project)
+    updated.setdefault('material', {}).update(
+        grade_id=grade_id, standard=grade.standard, E_MPa=grade.E,
+        fy_MPa=grade.fy, fu_MPa=grade.fu, source=grade.source,
+    )
+    updated.pop('external_resistances', None)
+    return updated
 
 
 def update_load_case(project, case_id, *, name, kind, value=0, force_unit='kgf',

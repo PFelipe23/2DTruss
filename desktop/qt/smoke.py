@@ -20,8 +20,13 @@ def run():
         window.open_3d()
         app.processEvents()
         dialog = window._view3d
-        if not dialog.isVisible() or not dialog.axial() or not dialog.view.scene().items():
+        if not dialog.isVisible() or not dialog.axial() or not dialog.mesh_layer.faces:
             raise RuntimeError('A inspeção 3D não apresentou o projeto calculado')
+
+        profile = 'HP 200 x 53,0 (H)'
+        window.assign_section('superior', profile, 1)
+        if not any(mesh.profile == profile for mesh in dialog._meshes) or dialog.axial():
+            raise RuntimeError('A vista 3D não acompanhou a troca de perfil')
 
         dxf = ROOT / 'examples' / 'trelica_triangular_analitica_dxf_mm.dxf'
         preview = load_cad(dxf)
@@ -34,10 +39,10 @@ def run():
             if load_project(path) != window.session.project:
                 raise RuntimeError('O projeto salvo diverge do projeto em memória')
 
+        window._dirty = False
         window.new()
-        if window._view3d is not None or window.session.result is not None:
+        if dialog.session is not window.session or dialog.axial() or window.session.result is not None:
             raise RuntimeError('O novo projeto conservou o visualizador ou a análise anterior')
     finally:
-        if window._view3d is not None:
-            window._view3d.close()
+        window._dirty = False
         window.close()

@@ -1,25 +1,71 @@
-perfil;familia;A_cm2;Ix_cm4;Iy_cm4;xg_cm;massa_kg_m;bw_mm;bf_mm;t_mm;origem;rmin_cm;qualidade
-U 100x50x2,65;U (dobrado);5,07;79,42;12,57;1,37;3,98;100;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-U 100x50x3,00;U (dobrado);5,70;88,60;14,05;1,39;4,48;100;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-U 100x50x3,75;U (dobrado);7,04;107,26;17,09;1,42;5,52;100;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-U 150x50x2,65;U (dobrado);6,39;206,17;14,18;1,12;5,02;150;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-U 150x50x3,00;U (dobrado);7,20;230,76;15,87;1,13;5,66;150;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-U 150x50x3,75;U (dobrado);8,91;281,45;19,35;1,16;7,00;150;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-Ue 150x60x20x3,00;UE (dobrado);8,71;298,00;41,90;1,92;6,84;150;60;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo
-L laminada 40x40x3;L (laminado);2.31000;3.58000;3.58000;1.10000;1.87000;40.00;40.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau
-L laminada 40x40x4;L (laminado);3.08000;4.47000;4.47000;1.15000;2.42000;40.00;40.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau
-L laminada 50x50x3;L (laminado);2.91000;7.15000;7.15000;1.35000;2.36000;50.00;50.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau
-L laminada 50x50x4;L (laminado);3.84000;9.26000;9.26000;1.40000;3.09000;50.00;50.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau
-L laminada 60x60x4;L (laminado);4.64000;16.31000;16.31000;1.65000;3.64000;60.00;60.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.19;Catálogo Gerdau
-L laminada 75x75x5;L (laminado);7.27000;38.70000;38.70000;2.02000;5.71000;75.00;75.00;5.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.48;Catálogo Gerdau
-L laminada 100x100x6;L (laminado);11.64000;114.40000;114.40000;2.72000;9.14000;100.00;100.00;6.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.99;Catálogo Gerdau
-U lam. 3pol x 6,10;U (laminado);7.78000;68.90000;8.20000;1.11000;6.10000;76.20;35.81;4.32;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
-U lam. 3pol x 7,44;U (laminado);9.48000;77.20000;10.30000;1.11000;7.44000;76.20;35.05;6.55;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
-U lam. 4pol x 8,04;U (laminado);10.10000;159.50000;13.10000;1.16000;8.04000;101.60;40.23;4.67;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau
-L dobrada 40x40x2;L (dobrado);1.56000;2.47617;2.47617;1.07436;1.22460;40.00;40.00;2.00;Geometria retangular idealizada sem raio de dobra;0.7986963408197898;Calculado: NÃO é dado normativo
-L dobrada 40x40x3;L (dobrado);2.31000;3.58182;3.58182;1.11104;1.81335;40.00;40.00;3.00;Geometria retangular idealizada sem raio de dobra;0.7918174646956045;Calculado: NÃO é dado normativo
-L dobrada 50x50x2,65;L (dobrado);2.57978;6.38003;6.38003;1.34847;2.02512;50.00;50.00;2.65;Geometria retangular idealizada sem raio de dobra;0.9972478737820973;Calculado: NÃO é dado normativo
-L dobrada 50x50x3;L (dobrado);2.91000;7.14935;7.14935;1.36134;2.28435;50.00;50.00;3.00;Geometria retangular idealizada sem raio de dobra;0.9947243218215199;Calculado: NÃO é dado normativo
-L dobrada 60x60x3;L (dobrado);3.51000;12.53563;12.53563;1.61154;2.75535;60.00;60.00;3.00;Geometria retangular idealizada sem raio de dobra;1.1980445112296847;Calculado: NÃO é dado normativo
-L dobrada 75x75x3;L (dobrado);4.41000;24.84552;24.84552;1.98673;3.46185;75.00;75.00;3.00;Geometria retangular idealizada sem raio de dobra;1.503433180627951;Calculado: NÃO é dado normativo
-L dobrada 100x100x3;L (dobrado);5.91000;59.76826;59.76826;2.61193;4.63935;100.00;100.00;3.00;Geometria retangular idealizada sem raio de dobra;2.0129526855924698;Calculado: NÃO é dado normativo
+perfil;familia;A_cm2;Ix_cm4;Iy_cm4;xg_cm;massa_kg_m;bw_mm;bf_mm;t_mm;origem;rmin_cm;qualidade;tf_mm
+U 100x50x2,65;U (dobrado);5,07;79,42;12,57;1,37;3,98;100;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+U 100x50x3,00;U (dobrado);5,70;88,60;14,05;1,39;4,48;100;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+U 100x50x3,75;U (dobrado);7,04;107,26;17,09;1,42;5,52;100;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+U 150x50x2,65;U (dobrado);6,39;206,17;14,18;1,12;5,02;150;50;2,65;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+U 150x50x3,00;U (dobrado);7,20;230,76;15,87;1,13;5,66;150;50;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+U 150x50x3,75;U (dobrado);8,91;281,45;19,35;1,16;7,00;150;50;3,75;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+Ue 150x60x20x3,00;UE (dobrado);8,71;298,00;41,90;1,92;6,84;150;60;3,00;Amostra original v0.3.0, conferir NBR 6355;;Demonstração: verificar catalogo;
+L laminada 40x40x3;L (laminado);2.31000;3.58000;3.58000;1.10000;1.87000;40.00;40.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau;
+L laminada 40x40x4;L (laminado);3.08000;4.47000;4.47000;1.15000;2.42000;40.00;40.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.79;Catálogo Gerdau;
+L laminada 50x50x3;L (laminado);2.91000;7.15000;7.15000;1.35000;2.36000;50.00;50.00;3.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau;
+L laminada 50x50x4;L (laminado);3.84000;9.26000;9.26000;1.40000;3.09000;50.00;50.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);0.99;Catálogo Gerdau;
+L laminada 60x60x4;L (laminado);4.64000;16.31000;16.31000;1.65000;3.64000;60.00;60.00;4.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.19;Catálogo Gerdau;
+L laminada 75x75x5;L (laminado);7.27000;38.70000;38.70000;2.02000;5.71000;75.00;75.00;5.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.48;Catálogo Gerdau;
+L laminada 100x100x6;L (laminado);11.64000;114.40000;114.40000;2.72000;9.14000;100.00;100.00;6.00;Gerdau - Tabela de Bitolas - Cantoneiras de Abas Iguais (2022);1.99;Catálogo Gerdau;
+U lam. 3pol x 6,10;U (laminado);7.78000;68.90000;8.20000;1.11000;6.10000;76.20;35.81;4.32;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau;
+U lam. 3pol x 7,44;U (laminado);9.48000;77.20000;10.30000;1.11000;7.44000;76.20;35.05;6.55;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau;
+U lam. 4pol x 8,04;U (laminado);10.10000;159.50000;13.10000;1.16000;8.04000;101.60;40.23;4.67;Gerdau - Perfil U - especificações técnicas;;Catálogo Gerdau;
+L dobrada 40x40x2;L (dobrado);1.56000;2.47617;2.47617;1.07436;1.22460;40.00;40.00;2.00;Geometria retangular idealizada sem raio de dobra;0.7986963408197898;Calculado: NÃO é dado normativo;
+L dobrada 40x40x3;L (dobrado);2.31000;3.58182;3.58182;1.11104;1.81335;40.00;40.00;3.00;Geometria retangular idealizada sem raio de dobra;0.7918174646956045;Calculado: NÃO é dado normativo;
+L dobrada 50x50x2,65;L (dobrado);2.57978;6.38003;6.38003;1.34847;2.02512;50.00;50.00;2.65;Geometria retangular idealizada sem raio de dobra;0.9972478737820973;Calculado: NÃO é dado normativo;
+L dobrada 50x50x3;L (dobrado);2.91000;7.14935;7.14935;1.36134;2.28435;50.00;50.00;3.00;Geometria retangular idealizada sem raio de dobra;0.9947243218215199;Calculado: NÃO é dado normativo;
+L dobrada 60x60x3;L (dobrado);3.51000;12.53563;12.53563;1.61154;2.75535;60.00;60.00;3.00;Geometria retangular idealizada sem raio de dobra;1.1980445112296847;Calculado: NÃO é dado normativo;
+L dobrada 75x75x3;L (dobrado);4.41000;24.84552;24.84552;1.98673;3.46185;75.00;75.00;3.00;Geometria retangular idealizada sem raio de dobra;1.503433180627951;Calculado: NÃO é dado normativo;
+L dobrada 100x100x3;L (dobrado);5.91000;59.76826;59.76826;2.61193;4.63935;100.00;100.00;3.00;Geometria retangular idealizada sem raio de dobra;2.0129526855924698;Calculado: NÃO é dado normativo;
+U 75x40x2;U (dobrado);3.020000;27.286517;4.853934;1.106623;2.370700;75;40;2;2DTruss: integração do contorno de paredes retas;1.267779;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 100x40x2;U (dobrado);3.520000;53.166933;5.290279;0.963636;2.763200;100;40;2;2DTruss: integração do contorno de paredes retas;1.225936;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 100x50x2;U (dobrado);3.920000;62.772267;9.815516;1.324490;3.077200;100;50;2;2DTruss: integração do contorno de paredes retas;1.582390;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 125x50x2,65;U (dobrado);5.822050;137.063109;13.632031;1.210106;4.570309;125;50;2.65;2DTruss: integração do contorno de paredes retas;1.530179;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 150x50x2;U (dobrado);4.920000;161.395600;11.013473;1.075610;3.862200;150;50;2;2DTruss: integração do contorno de paredes retas;1.496165;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 150x60x3;U (dobrado);7.920000;269.157600;26.782036;1.445455;6.217200;150;60;3;2DTruss: integração do contorno de paredes retas;1.838905;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 200x60x3;U (dobrado);9.420000;531.842600;28.909746;1.239172;7.394700;200;60;3;2DTruss: integração do contorno de paredes retas;1.751849;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+U 250x75x4,75;U (dobrado);18.548750;1622.139552;87.752396;1.586732;14.560769;250;75;4.75;2DTruss: integração do contorno de paredes retas;2.175065;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 75x40x15x2;UE (dobrado);3.620000;32.103017;8.761724;1.569613;2.841700;75;40;2;2DTruss: integração do contorno de paredes retas;1.555752;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 100x50x17x2;UE (dobrado);4.600000;73.545733;17.225991;1.853043;3.611000;100;50;2;2DTruss: integração do contorno de paredes retas;1.935144;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 100x50x17x2,65;UE (dobrado);6.060550;95.371661;22.264148;1.871634;4.757532;100;50;2.65;2DTruss: integração do contorno de paredes retas;1.916669;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 125x50x17x2,65;UE (dobrado);6.723050;161.037871;24.074358;1.700257;5.277594;125;50;2.65;2DTruss: integração do contorno de paredes retas;1.892318;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 150x60x20x2;UE (dobrado);6.120000;215.319600;32.321472;1.995425;4.804200;150;60;2;2DTruss: integração do contorno de paredes retas;2.298105;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 150x60x20x2,65;UE (dobrado);8.074550;281.097055;41.975122;2.014679;6.338522;150;60;2.65;2DTruss: integração do contorno de paredes retas;2.280010;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 200x75x25x3;UE (dobrado);11.820000;727.054600;95.553523;2.434264;9.278700;200;75;3;2DTruss: integração do contorno de paredes retas;2.843247;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+Ue 250x75x25x4,75;UE (dobrado);20.923750;1899.115515;155.621777;2.230973;16.425144;250;75;4.75;2DTruss: integração do contorno de paredes retas;2.727190;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 30x30x2;L (dobrado);1.160000;1.019591;1.019591;0.824138;0.910600;30;30;2;2DTruss: integração do contorno de paredes retas;0.595468;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 50x50x2;L (dobrado);1.960000;4.907758;4.907758;1.324490;1.538600;50;50;2;2DTruss: integração do contorno de paredes retas;1.002289;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 60x40x3;L (dobrado);2.910000;10.985217;4.026217;0.912887;2.284350;60;40;3;2DTruss: integração do contorno de paredes retas;0.883020;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 60x60x2,65;L (dobrado);3.109775;11.168209;11.168209;1.598627;2.441173;60;60;2.65;2DTruss: integração do contorno de paredes retas;1.200748;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 70x70x3,75;L (dobrado);5.109375;24.753100;24.753100;1.889335;4.010859;70;70;3.75;2DTruss: integração do contorno de paredes retas;1.395852;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 75x50x3;L (dobrado);3.660000;21.791220;8.029970;1.113115;2.873100;75;50;3;2DTruss: integração do contorno de paredes retas;1.109887;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 80x80x4;L (dobrado);6.240000;39.618790;39.618790;2.148718;4.898400;80;80;4;2DTruss: integração do contorno de paredes retas;1.597393;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+L dobrada 100x75x4,75;L (dobrado);8.086875;84.101297;41.374676;1.784857;6.348197;100;75;4.75;2DTruss: integração do contorno de paredes retas;1.639217;Geometria idealizada sem raios, conferir dimensões e propriedades do fabricante;
+W 150 x 13,0;W (laminado);16.6;635;82;5.00000;13.0;148;100;4.3;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.22256;Propriedades nominais publicadas pelo fabricante;4.9
+W 150 x 18,0;W (laminado);23.4;939;126;5.10000;18.0;153;102;5.8;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.32048;Propriedades nominais publicadas pelo fabricante;7.1
+W 150 x 22,5 (H);H (laminado);29.0;1229;387;7.60000;22.5;152;152;5.8;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;3.65306;Propriedades nominais publicadas pelo fabricante;6.6
+W 150 x 29,8 (H);H (laminado);38.5;1739;556;7.65000;29.8;157;153;6.6;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;3.80021;Propriedades nominais publicadas pelo fabricante;9.3
+W 150 x 37,1 (H);H (laminado);47.8;2244;707;7.70000;37.1;162;154;8.1;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;3.84588;Propriedades nominais publicadas pelo fabricante;11.6
+W 200 x 15,0;W (laminado);19.4;1305;87;5.00000;15.0;200;100;4.3;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.11767;Propriedades nominais publicadas pelo fabricante;5.2
+W 200 x 22,5;W (laminado);29.0;2029;142;5.10000;22.5;206;102;6.2;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.21282;Propriedades nominais publicadas pelo fabricante;8.0
+W 200 x 46,1 (H);H (laminado);58.6;4543;1535;10.15000;46.1;203;203;7.2;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;5.11806;Propriedades nominais publicadas pelo fabricante;11.0
+HP 200 x 53,0 (H);HP (laminado);68.1;4977;1673;10.35000;53.0;204;207;11.3;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;4.95649;Propriedades nominais publicadas pelo fabricante;11.3
+W 250 x 17,9;W (laminado);23.1;2291;91;5.05000;17.9;251;101;4.8;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;1.98479;Propriedades nominais publicadas pelo fabricante;5.3
+W 250 x 44,8;W (laminado);57.6;7158;704;7.40000;44.8;266;148;7.6;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;3.49603;Propriedades nominais publicadas pelo fabricante;13.0
+HP 250 x 62,0 (H);HP (laminado);79.6;8728;2995;12.80000;62.0;246;256;10.5;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;6.13397;Propriedades nominais publicadas pelo fabricante;10.7
+HP 250 x 85,0 (H);HP (laminado);108.5;12280;4225;13.00000;85.0;254;260;14.4;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;6.24020;Propriedades nominais publicadas pelo fabricante;14.4
+W 310 x 38,7;W (laminado);49.7;8581;727;8.25000;38.7;310;165;5.8;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;3.82463;Propriedades nominais publicadas pelo fabricante;9.7
+HP 310 x 79,0 (H);HP (laminado);100.0;16316;5258;15.30000;79.0;299;306;11.0;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;7.25121;Propriedades nominais publicadas pelo fabricante;11.0
+HP 310 x 93,0 (H);HP (laminado);119.2;19682;6387;15.40000;93.0;303;308;13.1;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;7.31999;Propriedades nominais publicadas pelo fabricante;13.1
+W 310 x 97,0 (H);H (laminado);123.6;22284;7286;15.25000;97.0;308;305;9.9;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;7.67777;Propriedades nominais publicadas pelo fabricante;15.4
+HP 310 x 125,0 (H);HP (laminado);159.0;27076;8823;15.60000;125.0;312;312;17.4;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;7.44920;Propriedades nominais publicadas pelo fabricante;17.4
+W 360 x 32,9;W (laminado);42.1;8358;291;6.35000;32.9;349;127;5.8;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.62909;Propriedades nominais publicadas pelo fabricante;8.5
+W 410 x 46,1;W (laminado);59.2;15690;514;7.00000;46.1;403;140;7.0;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;2.94660;Propriedades nominais publicadas pelo fabricante;11.2
+W 530 x 82,0;W (laminado);104.5;47569;2028;10.45000;82.0;528;209;9.5;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;4.40530;Propriedades nominais publicadas pelo fabricante;13.3
+W 610 x 113,0;W (laminado);145.3;88196;3426;11.40000;113.0;608;228;11.2;Gerdau · Tabela de Bitolas / Folder Segmento Industrial;4.85580;Propriedades nominais publicadas pelo fabricante;17.3

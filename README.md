@@ -1,6 +1,6 @@
 # 2DTruss — v0.1
 
-**2DTruss** é um aplicativo desktop em Python/PySide6 para concepção e análise linear de **treliças planas**, com editor de nós e barras, visualização de carregamentos e resultados, importação DXF, inspeção geométrica 3D de perfis U/UE/L e emissão de relatórios.
+**2DTruss** é um aplicativo desktop em Python/PySide6 para concepção e análise linear de **treliças planas**, com editor de nós e barras, visualização de carregamentos e resultados, importação DXF, inspeção geométrica 3D de perfis U, Ue, L, W, H e HP e emissão de relatórios.
 
 > **Estado: experimental.** A análise 2D ainda depende de validação cruzada efetiva no FTool. O pré-dimensionamento e a triagem de Euler/escoamento bruto **não são dimensionamento resistente normativo**. A janela PySide6 não está homologada em Windows; a importação DWG depende do ODA Converter; a inspeção 3D não é análise espacial e as seções podem ser idealizadas.
 
