@@ -13,5 +13,5 @@ Primeira edição nomeada 2DTruss para GitHub. Importa cumulativamente o protót
 - Não possui aprovação normativa ELU, comparação FTool efetivamente realizada nem dimensionamento espacial.
 
 ## Propriedade intelectual
-- Repositório deve permanecer privado até revisão de direitos e licença.
+- O código está sob a [licença MIT](../LICENSE). A [documentação de licenciamento](LICENCIAMENTO.md) acompanha a revisão dos materiais de terceiros.
 - O histórico técnico anterior permanece em `docs/` e pode citar versões legadas; não altera o número público da nova edição.

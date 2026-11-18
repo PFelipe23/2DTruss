@@ -5,7 +5,7 @@
 - Motor único: `poe_truss/` (Python, modelo de treliça plana elástica), preservado por compatibilidade.
 - Identidade pública e versão: `poe_truss/version.py` (**2DTruss v0.1**, nunca três componentes).
 - Preservar IDs de nós/barras, arquivos JSON e o contrato de unidades (1 kgf = 10 N).
-- Testar: `python -m unittest discover -s tests -p 'test_*.py'`.
+- Instalar `requirements-test.txt` e testar com `python -m pytest -q -rs tests`.
 
 ## Integridade de engenharia
 - Não classificar as triagens Euler/área bruta como resistência ELU normativa.

@@ -7,9 +7,24 @@
 1. Ter **Python 3.10+** instalado no perfil do usuário (com `py -3` disponível).
 2. Executar **`INSTALAR_DEPENDENCIAS_USUARIO.bat`** uma vez: instala PySide6 e ezdxf no perfil do usuário, sem elevar privilégios. A instalação requer acesso ao repositório de pacotes e pode ser bloqueada por políticas corporativas.
 3. Executar **`INICIAR_DESKTOP.bat`**. Não inicia servidor HTTP ou navegador.
-4. O opcional `BUILD_EXE_WINDOWS.bat` permite criar um diretório executável com PyInstaller, desde que esse empacotador esteja instalado no usuário. **O ZIP não inclui executável autossuficiente testado no Windows.**
+4. Use o procedimento abaixo para gerar um diretório executável com PyInstaller.
 
 Em Linux com dependências instaladas: `python3 2DTruss.pyw`.
+
+## Gerar o executável Windows
+
+Na raiz do repositório, use Python 3.12 de 64 bits em um ambiente virtual. Um Prompt de Comando comum é suficiente.
+
+```bat
+py -3.12 -m venv .venv
+call .venv\Scripts\activate.bat
+python -m pip install -r requirements-build.txt
+call BUILD_EXE_WINDOWS.bat
+```
+
+Extraia ou copie a pasta inteira `dist\2DTruss_v0.1` e abra `2DTruss_v0.1.exe`. A pasta `_internal` contém Python, Qt, o catálogo e os exemplos incluídos. O aplicativo empacotado roda sem instalação separada de Python. A importação DWG continua dependendo do conversor ODA local.
+
+Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2DTruss_v0.1\2DTruss_v0.1.exe" --smoke-test`. O código de saída 0 confirma a abertura do aplicativo, o cálculo do exemplo, a vista 3D, a importação do DXF de teste, a leitura e gravação JSON e a limpeza da análise ao iniciar outro projeto.
 
 ## Interface e atalhos
 
@@ -57,7 +72,7 @@ O esquema persistente continua **`poe-truss-python/v1`**. Um campo opcional `mod
 
 ## Limitações e evidências
 
-- Esta entrega implementa fonte PySide6. **Não pôde ser executada em Qt neste ambiente**, porque PySide6 não estava instalado e a instalação de pacotes externos foi impedida por ausência de acesso à rede.
+- O roteiro manual de interface nas resoluções-alvo permanece na [documentação de revisão 3D](docs/REDESENHO_UI_E_PERFIS_3D_V09.md).
 - O núcleo Python, a importação DXF com arquivos reais gerados para teste, a leitura/escrita JSON e o cálculo estrutural pós-importação foram testados.
 - DWG com ODA real e executável Windows não foram testados nesta infraestrutura.
 - Sem verificação normativa completa NBR 14762, NBR 8800, estabilidade global fora do plano ou aprovação ELU. O uso continua exploratório/experimental.
@@ -88,7 +103,7 @@ A aplicação principal foi reorganizada com navegador filtrável, painel de tar
 ## Limites ainda presentes
 
 - Ambiente de validação sem runtime PySide6: compilação sintática e testes do núcleo concluídos, **sem homologação gráfica real em Windows**.
-- Sem instalador Windows autossuficiente assinado; para executar é necessário Python 3.10+, PySide6 e ezdxf instalados no perfil do usuário, ou gerar futuramente `.exe` via PyInstaller.
+- O procedimento de build gera um pacote portátil sem assinatura digital.
 - Perfis duplos permanecem dependentes de hipóteses de solidarização; resistência por NBR 14762 ainda não implementada.
 - Intercâmbio DWG requer ODA File Converter externo.
 - Edição CAD com modelo explícito não suporta distribuição superficial automática: ações de área/linha ficam bloqueadas até implementação de associação de superfícies/tramos no CAD.

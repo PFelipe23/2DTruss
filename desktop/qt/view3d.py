@@ -248,11 +248,9 @@ class Truss3DDialog(QDialog):
             'connection_reference':cfg.get(group,{}).get('connection_reference',''),
         }
         try:
-            success=self._app._apply(project,f'Arranjo do {group} atualizado')
+            self._app._apply(project,f'Arranjo do {group} atualizado')
         except Exception as exc:
             QMessageBox.warning(self,'Arranjo não aplicado',str(exc));return
-        if success:
-            self.load_group();self.refresh_model()
 
     def set_preset(self,label):
         angles={'Isométrica':(30,25),'Frontal XY':(0,0),
@@ -263,13 +261,19 @@ class Truss3DDialog(QDialog):
         self.yaw.blockSignals(False);self.elevation.blockSignals(False)
         self.redraw();self.fit()
 
-    def refresh_model(self):
-        self._mesh_revision=None;self.redraw()
+    def refresh_model(self, case_id):
+        self.case_id = case_id
+        if self._mesh_revision != self.session.revision:
+            self.load_group()
+        self.reset_keys()
 
     def reset_keys(self,*_):
         mode=self.mode.currentData()
         keys=palette_keys(self.session.model,self.session.catalog,mode,self.axial())
+        previous = self.category.currentText()
         self.category.clear();self.category.addItems(keys)
+        if previous in keys:
+            self.category.setCurrentText(previous)
         for i,k in enumerate(keys):self.colors.setdefault(k,CYCLE[i%len(CYCLE)])
         self.redraw()
 
@@ -288,7 +292,10 @@ class Truss3DDialog(QDialog):
     def inspect_member(self,mid):
         self._selected_member=mid
         m=next((m for m in self.session.model.members if m.id==mid),None)
-        if not m:return
+        if not m:
+            self._selected_member = None
+            self.selected_label.setText('Clique direito sobre uma barra para inspecionar.')
+            return
         meta=self._member_meta.get(mid,{})
         n=self.axial().get(mid)
         lines=[f'<b>{escape(mid)}</b> · {escape(m.group)}',escape(m.profile),
@@ -306,8 +313,9 @@ class Truss3DDialog(QDialog):
         cam=Camera(float(self.yaw.value()),float(self.elevation.value()))
         all_faces=[];colors={}
         nodes=self.session.model.node_map()
+        members = {member.id: member for member in self.session.model.members}
         for mesh in self._meshes:
-            member=next((m for m in self.session.model.members if m.id==mesh.member_id),None)
+            member = members.get(mesh.member_id)
             if not member:continue
             key=color_key(member,self.session.catalog,mode,forces)
             base=self.colors.get(key,'#8395A3');colors[key]=base

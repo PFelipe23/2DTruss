@@ -1,6 +1,6 @@
-# Publicar 2DTruss v0.1 no GitHub
+# Registro da publicação inicial do 2DTruss v0.1
 
-O repositório Git local contém branch `main` e tag anotada **v0.1**. Não existe um repositório remoto publicado automaticamente.
+O [repositório oficial](https://github.com/PFelipe23/2DTruss) já está publicado com a licença MIT. O procedimento abaixo documenta a preparação do primeiro envio e fica como registro histórico.
 
 1. No GitHub, crie um **repositório vazio e privado** com nome `2DTruss`, na conta `PFelipe23`. Não inicialize com README ou licença.
 2. Extraia o ZIP **com a pasta oculta `.git`** e abra o terminal na raiz do projeto.

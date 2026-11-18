@@ -1,34 +1,14 @@
-# Licenciamento - decisão pendente (2DTruss v0.1)
+# Licenciamento do 2DTruss v0.1
 
-**Status:** ainda não há uma licença concedida para o código do 2DTruss.
-O projeto deve continuar privado enquanto a licença, a titularidade dos direitos
-patrimoniais e o uso de componentes/documentos de terceiros não forem revisados.
+O código do 2DTruss está sob a licença MIT publicada no arquivo [LICENSE](../LICENSE) do repositório. Mantenha o aviso de direitos autorais e o texto da licença nas cópias do código e do executável.
 
-## Recomendação: MIT
+## Procedência de dados e exemplos
 
-A licença MIT é simples e permissiva: permite uso, alteração, redistribuição e
-uso comercial, inclusive em projetos proprietários, desde que os avisos de
-copyright e licença sejam preservados. Não obriga quem modifica a publicar as
-alterações. É adequada se o objetivo é maximizar adoção e contribuições.
+- O catálogo `catalogo_perfis.csv` registra a fonte e a qualidade de cada entrada. Há valores demonstrativos, geometrias idealizadas e dados atribuídos a tabelas técnicas da Gerdau. Preserve essas indicações e verifique a autorização aplicável antes de redistribuir as tabelas de terceiros.
+- O pacote portátil inclui o modelo de cobertura usado na abertura e dois exemplos da treliça triangular analítica. O exemplo de tributação atribuído a Olídio fica fora do pacote. Ao contribuir, use modelos próprios ou autorizados e evite anexar textos integrais de normas, apostilas e desenhos de clientes.
 
-## Alternativas e condições
+## Dependências do pacote Windows
 
-- **Apache-2.0:** permissiva e mais detalhada, com concessão explícita de
-  direitos de patentes pelos contribuidores. Exige tratamento de avisos.
-- **GPL-3.0:** copyleft; ao redistribuir obras derivadas, normalmente exige
-  disponibilização do código correspondente sob GPL. Não impede uso comercial.
-- **Sem licença:** direitos reservados por padrão. Um repositório GitHub público
-  não concede automaticamente autorização para reprodução e redistribuição.
-
-## Antes de publicar uma licença
-
-1. Confirmar quem é o titular do código e quem pode licenciá-lo.
-2. Verificar procedência e direitos sobre catálogos, exemplos CAD, imagens,
-   textos de apostilas e normas técnicas, sem assumir que material anexado pode
-   ser redistribuído.
-3. Conferir condições de redistribuição do PySide6/Qt e demais dependências;
-   a licença MIT do código próprio não substitui as licenças das bibliotecas.
-4. Selecionar explicitamente uma licença; só então inserir `LICENSE` na raiz
-   do repositório e atualizar o `README.md`.
-
-**Não gerar um arquivo LICENSE definitivo sem decisão do titular.**
+- Os componentes Qt, PySide6 Essentials e Shiboken têm licenças próprias. A edição aberta usa LGPLv3/GPLv3 de acordo com o componente. Confira os avisos, o acesso ao código-fonte correspondente e as condições de substituição das bibliotecas ao redistribuir o pacote. [Licenças do Qt](https://doc.qt.io/qt-6/licensing.html) · [Qt for Python](https://doc.qt.io/qtforpython-6/licenses.html)
+- O ezdxf é distribuído sob MIT. Preserve também as licenças do Python e das bibliotecas auxiliares incluídas. O build copia os metadados e os arquivos de licença presentes nos pacotes Python selecionados para `_internal`. [Licença do ezdxf](https://ezdxf.readthedocs.io/en/stable/introduction.html)
+- O conversor ODA é uma dependência externa opcional para DWG, instalada e licenciada separadamente. O pacote portátil inclui suporte DXF.

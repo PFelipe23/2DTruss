@@ -316,8 +316,23 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         """Janela não modal: visualização tridimensional, sem solver 3D."""
         if self._view3d is not None and self._view3d.isVisible():
             self._view3d.raise_();self._view3d.activateWindow();return
-        self._view3d=Truss3DDialog(self.session,self.case_id,self)
-        self._view3d.show()
+        dialog = Truss3DDialog(self.session, self.case_id, self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.finished.connect(self._view3d_closed)
+        self._view3d = dialog
+        dialog.show()
+
+    def _view3d_closed(self, _result):
+        self._view3d = None
+
+    def _sync_view3d(self):
+        dialog = self._view3d
+        if dialog is None:
+            return
+        if dialog.session is not self.session:
+            dialog.close()
+            return
+        dialog.refresh_model(self.case_id)
 
     def _shortcuts(self):
         for key,func in [('Ctrl+O',self.open),('Ctrl+S',self.save),('Ctrl+Z',self.undo),('Ctrl+Y',self.redo),
@@ -335,9 +350,6 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.undo_stack.append(old);self.undo_stack=self.undo_stack[-100:]
         self.redo_stack.clear();self._dirty=True
         self.refresh(fit=fit)
-        if self._view3d is not None and self._view3d.isVisible():
-            self._view3d.case_id=None
-            self._view3d.refresh_model()
         self.status(f'{reason} · análise anterior invalidada');return True
 
     def refresh(self,fit=False):
@@ -383,6 +395,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.calc_badge.setObjectName('calcReady' if self.session.result else 'calcPending')
             self.calc_badge.style().unpolish(self.calc_badge);self.calc_badge.style().polish(self.calc_badge)
             self.setWindowTitle(APP_TITLE+('  *' if self._dirty else '')+(f'  — {self.filepath.name}' if self.filepath else ''))
+            self._sync_view3d()
         finally:self._refreshing=False
 
     def choose_tool(self,tool):
@@ -393,8 +406,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if self._refreshing:return
         self.case_id=text;self.view.render(self.session,self.case_id)
         self.refresh_result_table()
-        if self._view3d is not None and self._view3d.isVisible():
-            self._view3d.case_id=self.case_id;self._view3d.redraw()
+        self._sync_view3d()
 
     def on_tree_select(self):
         if self._refreshing:return

@@ -13,15 +13,16 @@ py -3 -m pip install --user -r requirements-desktop.txt
 py -3 2DTruss.pyw
 ```
 
-No Windows, também pode executar `INSTALAR_DEPENDENCIAS_USUARIO.bat` e `INICIAR_DESKTOP.bat`. O projeto não fornece um executável Windows autossuficiente homologado.
+No Windows, também pode executar `INSTALAR_DEPENDENCIAS_USUARIO.bat` e `INICIAR_DESKTOP.bat`. Para gerar o executável portátil com PyInstaller, siga o [guia desktop](LEIA-ME_DESKTOP.md#gerar-o-executável-windows).
 
 ## Testes
 
 ```bash
-python -m unittest discover -s tests -p 'test_*.py'
+python -m pip install -r requirements-test.txt
+python -m pytest -q -rs tests
 ```
 
-O CI executa os testes de regressão sem dependência de UI gráfica real. Testes ignorados devem ser tratados como pendências, não como aprovação. Executar os casos no FTool para a validação externa independente.
+O CI executa a regressão em Linux com Qt offscreen e verifica a inicialização do pacote gerado no Windows. A inspeção gráfica nas resoluções-alvo e a comparação independente dos casos no FTool têm roteiros próprios.
 
 ## Organização
 
@@ -46,4 +47,4 @@ A identificação pública é **2DTruss v0.1**, com uma casa decimal. Tag Git: `
 
 ## Licença e direitos
 
-A licença ainda não foi definida. **MIT é a recomendação, mas não foi concedida formalmente.** O repositório deverá permanecer **privado** até a decisão do titular e revisão de catálogos, bibliotecas e eventuais materiais de terceiros. Consulte [`docs/LICENCIAMENTO.md`](docs/LICENCIAMENTO.md). Não incluir normas ABNT nem cópias da apostila do Olídio.
+O código do 2DTruss é distribuído sob a [licença MIT](LICENSE). A [documentação de licenciamento](docs/LICENCIAMENTO.md) registra a procedência de dados e as licenças das dependências usadas no pacote Windows.
