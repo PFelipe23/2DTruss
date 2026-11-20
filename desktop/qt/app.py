@@ -16,17 +16,18 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBo
     QTreeWidget,QTreeWidgetItem,QTabWidget,QFormLayout,QGroupBox,QLineEdit,QFileDialog,
     QMessageBox,QInputDialog,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,
     QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QFrame,QSizePolicy,
-    QButtonGroup,QScrollArea,QStackedWidget,QTabBar,QMenu)
+    QButtonGroup,QScrollArea,QStackedWidget,QTabBar,QMenu,QWidgetAction)
 
 from desktop.bridge import Session,load_project,write_project
 from desktop import editing,cad_io,workflow
 from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html,ftool_comparison_full_rows
 from poe_truss.loads import load_patterns
+from poe_truss.model import GROUPS
 from poe_truss.units import FORCE_TO_N
 from poe_truss.version import APP_NAME, TAG
 from .action_icons import action_icon, IconButton as _button
-from .display_units import DisplayUnits, LOCALE, UnitsDialog
-from .viewport import TrussView
+from .display_units import DisplayUnits, LOCALE, LoadField, UnitsDialog, format_number
+from .viewport import COMP, DEFORMED, TENS, TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
 from .ui_theme import STYLE,workspace_palette
@@ -216,25 +217,61 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.center_split.addWidget(self.canvas_stack)
         center_layout.addWidget(self.center_split, 1)
         self.results_panel = QWidget()
+        self.results_panel.setObjectName('resultsPanel')
         result_layout = QVBoxLayout(self.results_panel)
         result_layout.setContentsMargins(7, 5, 7, 6)
         result_layout.setSpacing(4)
         result_header = QHBoxLayout()
-        self.dock_info = QLabel()
-        result_header.addWidget(self.dock_info, 1)
-        result_header.addWidget(_button('Detalhar', lambda: self._open_inspector_index(3), 'report'))
+        self.result_views = QTabBar()
+        self.result_views.setDrawBase(False)
+        self.result_views.setExpanding(False)
+        self.result_views.addTab('Esforços axiais')
+        self.result_views.addTab('Deformações')
+        result_header.addWidget(self.result_views)
+        result_header.addStretch()
+        self.axial_values = QCheckBox('Valores no diagrama')
+        self.axial_values.setChecked(True)
+        self.axial_values.toggled.connect(self._set_axial_values)
+        result_header.addWidget(self.axial_values)
+        self.result_detail_button = _button('Detalhar esforços e envoltórias',
+                                             lambda: self._open_inspector_index(3), 'report')
+        result_header.addWidget(self.result_detail_button)
+        self.deformation_controls = QWidget()
+        deformation_layout = QHBoxLayout(self.deformation_controls)
+        deformation_layout.setContentsMargins(0, 0, 0, 0)
+        self.auto_deformation = QCheckBox('Escala automática')
+        self.auto_deformation.setChecked(True)
+        self.deformation_scale = _spin(1, 1, 10_000, 1, 10)
+        self.deformation_scale.setMinimumWidth(82)
+        self.deformation_scale.setLocale(LOCALE)
+        self.deformation_scale.setPrefix('×')
+        self.deformation_scale.setAccessibleName('Fator de amplificação da deformada')
+        self.deformation_scale.setEnabled(False)
+        deformation_layout.addWidget(self.auto_deformation)
+        deformation_layout.addWidget(self.deformation_scale)
+        self.deformation_controls.hide()
+        result_header.addWidget(self.deformation_controls)
         result_layout.addLayout(result_header)
-        self.quick_table = QTableWidget(0, 5)
+        result_legend = QHBoxLayout()
+        self.dock_info = QLabel()
+        self.result_legend = QLabel()
+        result_legend.addWidget(self.dock_info, 1)
+        result_legend.addWidget(self.result_legend)
+        result_layout.addLayout(result_legend)
+        self.quick_table = QTableWidget(0, 4)
         self.quick_table.setHorizontalHeaderLabels(self._result_headers('Seção'))
         self.quick_table.setAlternatingRowColors(True)
         self.quick_table.verticalHeader().hide()
         self.quick_table.verticalHeader().setDefaultSectionSize(24)
         self.quick_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.quick_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        for column in range(4):
+        for column in range(3):
             self.quick_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        self.quick_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        self.quick_table.cellClicked.connect(self.quick_select_member)
+        self.quick_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.quick_table.cellClicked.connect(self.quick_select_result)
+        self.result_views.currentChanged.connect(self._result_view_changed)
+        self.auto_deformation.toggled.connect(self._deformation_scale_changed)
+        self.deformation_scale.valueChanged.connect(self._deformation_scale_changed)
         result_layout.addWidget(self.quick_table, 1)
         self.center_split.addWidget(self.results_panel)
         self.center_split.setStretchFactor(0, 1)
@@ -329,8 +366,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             divider.setFixedSize(1, 19)
             line.addWidget(divider)
 
-        for label, flag, icon in [('Identificadores dos nós', 'show_ids', 'node_ids'),
-                                  ('Identificadores das barras', 'show_member_ids', 'bar_ids'),
+        line.addWidget(self._workspace_button('Identificadores dos nós', 'show_ids', 'node_ids', light=True))
+        line.addWidget(self._build_member_tags_button())
+        for label, flag, icon in [
                                   ('Esforços', 'show_efforts', 'force'),
                                   ('Deformada', 'show_deformed', 'deformed')]:
             line.addWidget(self._workspace_button(label, flag, icon, light=True))
@@ -369,6 +407,41 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         run.setObjectName('calculateButton')
         line.addWidget(run)
         main.insertWidget(0, self.toolbar)
+
+    def _build_member_tags_button(self):
+        button = _button('Identificadores por tipo de barra', lambda: None, 'bar_ids',
+                         checkable=True, light=True)
+        menu = QMenu(button)
+        menu.setObjectName('memberTagsMenu')
+        form = QWidget(menu)
+        layout = QVBoxLayout(form)
+        layout.setContentsMargins(12, 8, 14, 8)
+        label = QLabel('Identificadores das barras')
+        label.setObjectName('panelHeading')
+        layout.addWidget(label)
+        options = {'superior': 'Banzo superior', 'inferior': 'Banzo inferior',
+                   'montante': 'Montantes', 'diagonal': 'Diagonais'}
+        self.member_tag_checks = {}
+        for group in GROUPS:
+            choice = QCheckBox(options[group], form)
+            choice.toggled.connect(lambda checked, name=group: self._set_member_tags(name, checked))
+            layout.addWidget(choice)
+            self.member_tag_checks[group] = choice
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(form)
+        menu.addAction(action)
+        button.setMenu(menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.member_tags_button = button
+        return button
+
+    def _set_member_tags(self, group, checked):
+        if checked:
+            self.view.member_id_groups.add(group)
+        else:
+            self.view.member_id_groups.discard(group)
+        self.member_tags_button.setChecked(bool(self.view.member_id_groups))
+        self.view.render(self.session, self.case_id)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -514,8 +587,37 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.results_panel.setVisible(visible and not self._drawing_only)
         if was_hidden and self.results_panel.isVisible():
             height = self.center_split.height()
-            results_height = min(215, height // 3)
+            results_height = min(235, height * 2 // 5)
             self.center_split.setSizes([height - results_height, results_height])
+            if self.session.result and not self.mode_3d.isChecked():
+                self._result_view_changed(self.result_views.currentIndex())
+
+    def _result_view_changed(self, index):
+        deform = index == 1
+        self.deformation_controls.setVisible(deform)
+        self.axial_values.setVisible(not deform)
+        self.result_detail_button.setVisible(not deform)
+        if deform and self.mode_3d.isChecked():
+            self.set_3d_visible(False)
+        self.view.show_efforts = not deform
+        self.view.show_deformed = deform
+        self._overlay_buttons['show_efforts'].setChecked(not deform)
+        self._overlay_buttons['show_deformed'].setChecked(deform)
+        self.view.render(self.session, self.case_id, fit=True)
+        self.refresh_quick_table()
+
+    def _set_axial_values(self, visible):
+        self.view.show_axial_values = visible
+        if self.view.show_efforts:
+            self.view.render(self.session, self.case_id)
+
+    def _deformation_scale_changed(self, *_):
+        automatic = self.auto_deformation.isChecked()
+        self.deformation_scale.setEnabled(not automatic)
+        self.view.deformation_factor = None if automatic else self.deformation_scale.value()
+        if self.view.show_deformed:
+            self.view.render(self.session, self.case_id, fit=True)
+            self.refresh_quick_table()
 
     def _set_drawing_only(self, enabled):
         self._drawing_only = enabled
@@ -595,8 +697,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             return
         active = [(fx, fy) for fx, fy in forces.values() if hypot(fx, fy) > 1e-8]
         if active:
-            fx = self.units.force_text(fsum(x for x, _ in active), signed=True, unit=False)
-            fy = self.units.force_text(fsum(y for _, y in active), signed=True)
+            fx = self.units.force_text(fsum(x for x, _ in active), signed=True, unit=False, load=True)
+            fy = self.units.force_text(fsum(y for _, y in active), signed=True, load=True)
             self.force_summary.setText(
                 f'{self.case_id} · {len(active)} nós com carga · ΣFx {fx} · ΣFy {fy}'
             )
@@ -679,8 +781,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.load_node.setPlaceholderText('Escolher nó')
         self.load_node.currentTextChanged.connect(self._refresh_load_controls)
         fields.addRow('Nó', self.load_node)
-        self.fx = _spin(0, -1e9, 1e9, 3, 1)
-        self.fy = _spin(0, -1e9, 1e9, 3, 1)
+        self.fx = LoadField(-1e9, 1e9)
+        self.fy = LoadField(-1e9, 1e9)
         self.fx.valueChanged.connect(self._refresh_load_controls)
         self.fy.valueChanged.connect(self._refresh_load_controls)
         components = QHBoxLayout()
@@ -744,11 +846,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.result_mode.currentTextChanged.connect(self.refresh_result_table)
         col.addWidget(self.result_mode)
         col.addLayout(filter_row)
-        self.result_table=QTableWidget(0,5)
+        self.result_table=QTableWidget(0,4)
         self.result_table.setHorizontalHeaderLabels(self._result_headers('Perfil'))
-        for col_idx in range(4):
+        for col_idx in range(3):
             self.result_table.horizontalHeader().setSectionResizeMode(col_idx,QHeaderView.ResizeMode.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(4,QHeaderView.ResizeMode.Stretch)
+        self.result_table.horizontalHeader().setSectionResizeMode(3,QHeaderView.ResizeMode.Stretch)
         self.result_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.result_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.result_table.itemSelectionChanged.connect(self.select_result)
@@ -783,8 +885,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.snap.setEnabled(not visible)
         self.grid.setEnabled(not visible)
         self.forces_button.setEnabled(not visible)
-        for overlay in ('show_ids', 'show_member_ids'):
+        for overlay in ('show_ids', 'show_deformed'):
             self._overlay_buttons[overlay].setEnabled(not visible)
+        self.member_tags_button.setEnabled(not visible)
         self.force_bar.setVisible(self.view.show_forces and not visible)
         self._sync_context_tabs()
         self._refresh_property_summary()
@@ -919,6 +1022,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def _update_selection(self, selected, *, show_properties=True):
         self._selected=selected
+        self._sync_quick_selection()
         if self._nodal_editor_active():
             if not selected or self._selected_load_nodes():
                 self._follow_load_selection()
@@ -976,6 +1080,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             selected = [('member', member)] if member else []
         table = self.property_summary
         table.clear()
+        analysis = (self.session.result or {}).get('analyses', {}).get(self.case_id, {})
 
         def group(title, values):
             parent = QTreeWidgetItem(table, [title])
@@ -995,8 +1100,13 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 if node is not None:
                     ux, uy = model.supports.get(identifier, (False, False))
                     axes = ', '.join(axis for axis, active in [('UX', ux), ('UY', uy)] if active)
-                    group('Nó selecionado', [('ID', identifier), ('X', self.units.length_text(node.x)),
-                                            ('Y', self.units.length_text(node.y)), ('Apoio', axes or 'Livre')])
+                    values = [('ID', identifier), ('X', self.units.length_text(node.x)),
+                              ('Y', self.units.length_text(node.y)), ('Apoio', axes or 'Livre')]
+                    delta = analysis.get('nodal_displacements', {}).get(identifier)
+                    if delta is not None:
+                        values.extend([('Ux', self.units.displacement_text(delta['ux_mm'], signed=True)),
+                                       ('Uy', self.units.displacement_text(delta['uy_mm'], signed=True))])
+                    group('Nó selecionado', values)
                 else:
                     draft = next((row for row in self.session.project.get('cad_drafts', [])
                                   if row['id'] == identifier), None)
@@ -1009,11 +1119,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                     values = [('ID', identifier), ('Nós', f'{member.i} → {member.j}'),
                               ('Grupo', member.group), ('Perfil', member.profile),
                               ('Comprimento', self.units.length_text(model.member_length(member)))]
-                    result = (self.session.result or {}).get('analyses', {}).get(self.case_id, {})
-                    force = result.get('axial_n', {}).get(identifier)
+                    force = analysis.get('axial_n', {}).get(identifier)
                     if force is not None:
-                        values.extend([('Esforço normal', self.units.force_text(force, signed=True)),
-                                       ('Tensão axial', self.units.stress_text(force / member.area, signed=True))])
+                        values.append(('Esforço normal', self.units.force_text(force, signed=True)))
                     group('Barra selecionada', values)
         elif selected:
             groups = [kind for kind, _ in selected]
@@ -1144,8 +1252,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         with QSignalBlocker(self.load_case), QSignalBlocker(self.load_node):
             self.load_case.setCurrentIndex(-1)
             self.load_node.setCurrentIndex(-1)
-        self.fx.setValue(0)
-        self.fy.setValue(0)
+        self.fx.set_stored_value(0)
+        self.fy.set_stored_value(0)
         self.force_unit.setCurrentText(self.units.force)
 
     def _load_case_changed(self, case):
@@ -1207,8 +1315,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             load = rows[row]
             node = str(load['node'])
             self.load_node.setCurrentIndex(self.load_node.findText(node))
-            self.fx.setValue(float(load.get('fx', 0)))
-            self.fy.setValue(float(load.get('fy', 0)))
+            self.fx.set_stored_value(float(load.get('fx', 0)))
+            self.fy.set_stored_value(float(load.get('fy', 0)))
             self.force_unit.setCurrentText(load.get('force_unit', case.get('force_unit', 'kgf')))
             selection = [('node', node)]
             self._set_canvas_selection(selection)
@@ -1226,10 +1334,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def _save_nodal_loads(self, nodes, *, index=None):
         case = self.load_case.currentText()
+        unit = self.force_unit.currentText()
+        source = self._active_nodal_case()
+        original = source['loads'][index] if index is not None else {}
+        preserve = index is not None and unit == original.get('force_unit', source.get('force_unit', 'kgf'))
+        fx, fy = (field.submitted_value() if preserve else field.value() for field in (self.fx, self.fy))
         try:
             updated = workflow.update_nodal_loads(
                 self.session.project, self.session.model, case, nodes,
-                self.fx.value(), self.fy.value(), self.force_unit.currentText(), index,
+                fx, fy, unit, index,
             )
         except (ValueError, IndexError) as error:
             QMessageBox.warning(self, 'Carga nodal', str(error))
@@ -1270,8 +1383,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 try:
                     scale = FORCE_TO_N[input_unit]
                     values = (str(load['node']),
-                              self.units.force_text(float(load.get('fx', 0)) * scale, unit=False),
-                              self.units.force_text(float(load.get('fy', 0)) * scale, unit=False),
+                              self.units.force_text(float(load.get('fx', 0)) * scale, unit=False, load=True),
+                              self.units.force_text(float(load.get('fy', 0)) * scale, unit=False, load=True),
                               self.units.force)
                 except (KeyError, TypeError, ValueError):
                     values = (str(load['node']), str(load.get('fx', 0)), str(load.get('fy', 0)), str(input_unit))
@@ -1294,11 +1407,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.status('Análise concluída · verifique estados-limites e travamentos separadamente')
 
     def _result_headers(self, profile_title):
-        return ['Barra', 'Grupo', f'N ({self.units.force})', f'σ ({self.units.stress})', profile_title]
+        return ['Barra', 'Grupo', f'N ({self.units.force})', profile_title]
 
     def _result_row(self, member, force):
-        return (member.id, member.group, self.units.force_text(force, signed=True, unit=False),
-                self.units.stress_text(force / member.area, signed=True, unit=False), member.profile)
+        return (member.id, member.group, self.units.force_text(force, signed=True, unit=False), member.profile)
 
     def refresh_result_table(self,*_):
         if not hasattr(self,'result_table'):return
@@ -1326,7 +1438,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             axial_force = force(m.id)
             for j,val in enumerate(self._result_row(m, axial_force)):
                 item=QTableWidgetItem(str(val))
-                if j in (2, 3):
+                if j == 2:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     if axial_force:
                         item.setForeground(QColor('#C53646' if axial_force>0 else '#2666B8'))
@@ -1355,11 +1467,19 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             f'Compressão máxima: {compression} ({envelope["compression_case"]})')
 
     def _set_overlay(self, flag, visible):
+        if visible and flag in ('show_deformed', 'show_efforts') and not self.mode_3d.isChecked():
+            index = int(flag == 'show_deformed')
+            with QSignalBlocker(self.result_views):
+                self.result_views.setCurrentIndex(index)
+            self._result_view_changed(index)
+            return
         setattr(self.view, flag, visible)
         self._overlay_buttons[flag].setChecked(visible)
         if flag == 'show_forces':
             self.forces_button.setChecked(visible)
         self.view.render(self.session, self.case_id)
+        if flag in ('show_deformed', 'show_efforts'):
+            self.refresh_quick_table()
     def change_vertical(self):
         values=[1.,1.5,2.,3.,4.];current=self.view._vertical
         nxt=values[(values.index(current)+1)%len(values)] if current in values else 1.
@@ -1520,37 +1640,107 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             root.setHidden(not found)
             if q:root.setExpanded(True)
 
-    def quick_select_member(self,row,column):
-        item=self.quick_table.item(row,0)
-        if not item:return
-        selection = [('member', item.text())]
+    def quick_select_result(self, row, column):
+        item = self.quick_table.item(row, 0)
+        if item is None:
+            return
+        kind = 'node' if self.result_views.currentIndex() == 1 else 'member'
+        selection = [(kind, item.text())]
         self._set_canvas_selection(selection)
-        self._update_selection(selection)
+        self._update_selection(selection, show_properties=False)
+
+    def _sync_quick_selection(self):
+        table = self.quick_table
+        with QSignalBlocker(table):
+            table.clearSelection()
+            table.setCurrentCell(-1, -1)
+            kind = 'node' if self.result_views.currentIndex() == 1 else 'member'
+            if len(self._selected) != 1 or self._selected[0][0] != kind:
+                return
+            identifier = self._selected[0][1]
+            for item in table.findItems(identifier, Qt.MatchFlag.MatchExactly):
+                if item.column() == 0:
+                    table.selectRow(item.row())
+                    break
 
     def refresh_quick_table(self):
-        if not hasattr(self,'quick_table'):return
-        self.quick_table.blockSignals(True)
-        try:
-            self.quick_table.setHorizontalHeaderLabels(self._result_headers('Seção'))
-            data=self.session.result
-            if not data or not self.case_id or self.case_id not in data.get('analyses',{}):
+        if not hasattr(self, 'quick_table'):
+            return
+        deform = self.result_views.currentIndex() == 1
+        analysis = (self.session.result or {}).get('analyses', {}).get(self.case_id)
+        with QSignalBlocker(self.quick_table):
+            if deform:
+                unit = self.units.length
+                headers = ['Nó', f'Ux ({unit})', f'Uy ({unit})', f'|u| ({unit})']
+            else:
+                headers = self._result_headers('Seção')
+            self.quick_table.setHorizontalHeaderLabels(headers)
+            header = self.quick_table.horizontalHeader()
+            for column in range(len(headers)):
+                mode = QHeaderView.ResizeMode.Stretch if deform or column == 3 else QHeaderView.ResizeMode.ResizeToContents
+                header.setSectionResizeMode(column, mode)
+                if deform and column > 0:
+                    alignment = Qt.AlignmentFlag.AlignRight
+                else:
+                    alignment = Qt.AlignmentFlag.AlignLeft
+                self.quick_table.horizontalHeaderItem(column).setTextAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
+            if analysis is None:
                 self.quick_table.setRowCount(0)
-                self.dock_info.setText('Sem resultados no caso selecionado')
+                self.dock_info.setText('Calcule o modelo ou selecione um caso com resultados.')
+                self.result_legend.clear()
                 return
-            axial=data['analyses'][self.case_id].get('axial_n',{})
-            records=sorted(self.session.model.members,key=lambda m:abs(axial.get(m.id,0)),reverse=True)
+
+            if deform:
+                records = self._displacement_rows(analysis['nodal_displacements'])
+            else:
+                axial = analysis['axial_n']
+                members = sorted(self.session.model.members, key=lambda m: abs(axial[m.id]), reverse=True)
+                records = [(self._result_row(member, axial[member.id]),
+                            TENS if axial[member.id] > 0 else COMP if axial[member.id] < 0 else None)
+                           for member in members]
+                self.dock_info.setText(f'{self.case_id} · {len(members)} barras')
+                self.result_legend.setText(
+                    f'<span style="color:{TENS}">● Tração (+)</span> &nbsp;'
+                    f'<span style="color:{COMP}">● Compressão (−)</span> &nbsp;'
+                    f'<span style="color:#60788C">● Nulo</span>')
+
             self.quick_table.setRowCount(len(records))
-            for i,m in enumerate(records):
-                f=axial.get(m.id,0)
-                for j,val in enumerate(self._result_row(m, f)):
-                    cell=QTableWidgetItem(str(val))
-                    if j in (2, 3):
+            for row, (values, color) in enumerate(records):
+                for column, value in enumerate(values):
+                    cell = QTableWidgetItem(str(value))
+                    if (deform and column > 0) or (not deform and column == 2):
                         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                        if f:
-                            cell.setForeground(QColor('#BC3D4E' if f>0 else '#2766A7'))
-                    self.quick_table.setItem(i,j,cell)
-            self.dock_info.setText(f'{len(records)} barras · {self.case_id} · valores do modelo calculado')
-        finally:self.quick_table.blockSignals(False)
+                        if color:
+                            cell.setForeground(QColor(color))
+                    self.quick_table.setItem(row, column, cell)
+            self._sync_quick_selection()
+
+    def _displacement_rows(self, displacements):
+        rows = sorted(displacements.items(),
+                      key=lambda row: hypot(row[1]['ux_mm'], row[1]['uy_mm']), reverse=True)
+        records = []
+        for node, delta in rows:
+            ux, uy = delta['ux_mm'], delta['uy_mm']
+            records.append(((node,
+                             self.units.displacement_text(ux, signed=True, unit=False),
+                             self.units.displacement_text(uy, signed=True, unit=False),
+                             self.units.displacement_text(hypot(ux, uy), unit=False)), None))
+        title = f'{self.case_id} · {len(rows)} nós'
+        if rows:
+            node, delta = max(rows, key=lambda row: abs(row[1]['uy_mm']))
+            peak = self.units.displacement_text(delta['uy_mm'], signed=True)
+            title += f' · Máx. |Uy| em {node} ({peak})'
+        self.dock_info.setText(title)
+        amp = self.view.effective_deformation_factor
+        if amp is None or self.mode_3d.isChecked():
+            self.result_legend.clear()
+        else:
+            with QSignalBlocker(self.deformation_scale):
+                self.deformation_scale.setValue(amp)
+            self.result_legend.setText(
+                f'<span style="color:#60788C">━ Original</span> &nbsp;'
+                f'<span style="color:{DEFORMED}">┄ Deformada ×{format_number(amp, 1)}</span>')
+        return records
 
 
 

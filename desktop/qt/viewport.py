@@ -4,16 +4,17 @@ Qt somente representa/despacha comandos de edição. Todas as mutações passam
 por desktop.editing + Session.update_project e são validadas pelo núcleo.
 """
 from __future__ import annotations
-from math import atan2,ceil,degrees,floor,hypot,isfinite,log10
+from math import ceil,floor,hypot,isfinite,log10
 from PySide6.QtCore import Qt,QLineF,QPointF,QSignalBlocker,Signal,QRectF
-from PySide6.QtGui import QColor,QPen,QBrush,QFont,QPainter,QPainterPath,QRegion,QTransform
+from PySide6.QtGui import QColor,QPen,QBrush,QFont,QPainter,QPainterPath,QRegion
 from PySide6.QtWidgets import (QGraphicsView,QGraphicsScene,QGraphicsEllipseItem,
                                QGraphicsLineItem,QGraphicsPathItem,QGraphicsSimpleTextItem,QGraphicsItem)
 from .display_units import DisplayUnits
 
-NAVY='#1C354D'; BLUE='#1676AF'; TENS='#C53646'; COMP='#2666B8'; GHOST='#9CAAB5'
+BLUE='#1676AF'; TENS='#C53646'; COMP='#2666B8'
 NODE_RADIUS = 6
 DEFAULT_UNITS = DisplayUnits()
+DEFORMED = '#087C69'
 
 
 class NodeItem(QGraphicsEllipseItem):
@@ -41,7 +42,7 @@ class NodeItem(QGraphicsEllipseItem):
 
 
 class MemberItem(QGraphicsLineItem):
-    def __init__(self,m,coords,force=None,units=DEFAULT_UNITS):
+    def __init__(self,m,coords,force=None,units=DEFAULT_UNITS,*,ghost=False):
         a,b=coords[m.i],coords[m.j]
         super().__init__(a.x(),a.y(),b.x(),b.y())
         self.member_id=m.id
@@ -49,7 +50,14 @@ class MemberItem(QGraphicsLineItem):
         self.setZValue(10)
         chord = m.group in ('superior','inferior')
         color=TENS if force is not None and force>1e-7 else COMP if force is not None and force< -1e-7 else BLUE if chord else '#718899'
-        pen=QPen(QColor(color), 2.4 if chord else 1.6);pen.setCosmetic(True)
+        width = 2.4 if chord else 1.6
+        if ghost:
+            color, width = '#A6B3BF', 1.4
+        elif force is not None:
+            width = 3 if abs(force) > 1e-7 else 1.4
+            if abs(force) <= 1e-7:
+                color = '#91A4B4'
+        pen=QPen(QColor(color), width);pen.setCosmetic(True)
         self.setPen(pen)  # largura cosmética em qualquer zoom
         self.setToolTip(f'{m.id} | {m.group} | {m.profile}' + (
             f' | N={units.force_text(force, signed=True)}' if force is not None else ''))
@@ -64,6 +72,25 @@ class MemberItem(QGraphicsLineItem):
         painter.setPen(self.pen())
         painter.drawLine(self.line())
         painter.restore()
+
+
+class BoxedLabel(QGraphicsSimpleTextItem):
+    def __init__(self, text, color, parent=None, *, bold=False):
+        super().__init__(text, parent)
+        self.setFont(QFont('Segoe UI', 9, QFont.Weight.DemiBold if bold else QFont.Weight.Normal))
+        self.setBrush(QColor(color))
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
+    def boundingRect(self):
+        return super().boundingRect().adjusted(-3, -1, 3, 1)
+
+    def paint(self, painter, option, widget=None):
+        painter.save()
+        painter.setBrush(QColor('#FCFDFE'))
+        painter.setPen(QPen(QColor('#AABCCB'), 1))
+        painter.drawRoundedRect(self.boundingRect().adjusted(.5, .5, -.5, -.5), 2, 2)
+        painter.restore()
+        super().paint(painter, option, widget)
 
 
 class ForceVectorItem(QGraphicsPathItem):
@@ -93,31 +120,21 @@ class ForceVectorItem(QGraphicsPathItem):
         pen = QPen(QColor('#B66217'), 1.6)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
-        self.setToolTip(f'{node} · Fx {units.force_text(fx, signed=True)} · '
-                        f'Fy {units.force_text(fy, signed=True)}')
-        self.label = QGraphicsSimpleTextItem(units.force_text(magnitude), self)
-        self.label.setFont(QFont('Segoe UI', 9))
-        self.label.setBrush(QBrush(QColor('#895019')))
-        self.label.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.setToolTip(f'{node} · Fx {units.force_text(fx, signed=True, load=True)} · '
+                        f'Fy {units.force_text(fy, signed=True, load=True)}')
+        self.label = BoxedLabel(units.force_text(magnitude, load=True), '#895019', self)
 
 
-class IdentifierItem(QGraphicsSimpleTextItem):
-    def __init__(self, text, anchor, node):
-        super().__init__(text)
+class AnchoredLabel(BoxedLabel):
+    def __init__(self, text, anchor, node, color, *, bold=False, below=False):
+        super().__init__(text, color, bold=bold)
         self.anchor = anchor
         self.node = node
+        self.below = below
         self.setPos(anchor)
-        self.setFont(QFont('Segoe UI', 9))
-        self.setBrush(QColor('#245376' if node else '#326C66'))
-        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setZValue(42)
         self.hide()
-
-    def paint(self, painter, option, widget=None):
-        painter.fillRect(self.boundingRect(), QColor(248, 252, 255, 235))
-        super().paint(painter, option, widget)
-
 
 class TrussView(QGraphicsView):
     selected=Signal(list)            # [(kind, id)]
@@ -143,12 +160,17 @@ class TrussView(QGraphicsView):
         self.grid_visible = True
         self._analysis_id = None
         self.units = DEFAULT_UNITS
-        self.show_ids=False;self.show_member_ids=False;self.show_efforts=False;self.show_forces=False
+        self.show_ids=False;self.show_efforts=False;self.show_forces=False
+        self.member_id_groups = set()
         self.show_load_values = False
         self._force_items = []
         self._annotations = []
         self._identifiers = []
-        self.show_deformed=False;self.show_all_labels=False
+        self._axial_labels = []
+        self.show_axial_values = True
+        self.show_deformed = False
+        self.deformation_factor = None
+        self.effective_deformation_factor = None
         self._members={};self._nodes={};self._drafts={};self._pos={}
         self._analysis=None;self._model=None;self._session=None
         self._pending_first=None;self._drag_start={};self._fit_pending=False
@@ -215,19 +237,8 @@ class TrussView(QGraphicsView):
         self.coordinates_changed.emit(point.x(), -point.y() / self._vertical)
         super().mouseMoveEvent(event)
 
-    def _add_text(self,text,pos,color=NAVY,rotation=0,bold=False):
-        item=QGraphicsSimpleTextItem(str(text))
-        f=QFont('Segoe UI',9)
-        f.setBold(bold)
-        item.setFont(f);item.setBrush(QBrush(QColor(color)))
-        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations,True)
-        item.setRotation(rotation);item.setPos(pos)
-        item.setZValue(50)
-        self.scene().addItem(item)
-        self._annotations.append(item)
-
     def _add_identifier(self, text, anchor, *, node):
-        item = IdentifierItem(text, anchor, node)
+        item = AnchoredLabel(text, anchor, node, '#245376' if node else '#326C66')
         self.scene().addItem(item)
         self._identifiers.append(item)
 
@@ -240,33 +251,35 @@ class TrussView(QGraphicsView):
         self._force_items.clear()
         self._annotations.clear()
         self._identifiers.clear()
+        self._axial_labels.clear()
+        self.effective_deformation_factor = None
         scene=self.scene();scene.blockSignals(True);scene.clear()
         self._members={};self._nodes={};self._drafts={}
         self._pos={n.id:QPointF(n.x,-n.y*self._vertical) for n in model.nodes}
         force=(self._analysis or {}).get('axial_n',{})
+        deforming = self.show_deformed and self._analysis is not None
         for m in model.members:
-            item=MemberItem(m,self._pos,force.get(m.id) if self.show_efforts else None,self.units)
+            item=MemberItem(m,self._pos,force.get(m.id) if self.show_efforts else None,self.units,ghost=deforming)
             scene.addItem(item);self._members[m.id]=item
         # Os esforços de maior magnitude são anotados primeiro.
-        if self.show_efforts and self._analysis:
+        if self.show_efforts and self._analysis and self.show_axial_values:
             ranked=sorted(model.members,key=lambda m:abs(force.get(m.id,0)),reverse=True)
-            for m in ranked if self.show_all_labels else ranked[:min(24,len(ranked))]:
+            for m in ranked:
                 axial=force.get(m.id,0)
                 if abs(axial)<.0001:continue
-                a,b=self._pos[m.i],self._pos[m.j]
-                dx=b.x()-a.x();dy=b.y()-a.y()
-                ang=degrees(atan2(dy,dx))
-                if ang>90:ang-=180
-                if ang< -90:ang+=180
-                length=hypot(dx,dy)
-                if length<1:continue
-                mid=QPointF((a.x()+b.x())/2,(a.y()+b.y())/2)
-                shift=QPointF(-dy/length*80,dx/length*80)
-                self._add_text(self.units.force_text(axial, signed=True, unit=False),
-                               mid+shift,TENS if axial>0 else COMP,ang,True)
+                mid = (self._pos[m.i] + self._pos[m.j]) / 2
+                label = AnchoredLabel(self.units.force_text(axial, signed=True, unit=False),
+                                      mid, False, TENS if axial > 0 else COMP, bold=True)
+                scene.addItem(label)
+                self._axial_labels.append(label)
         for n in model.nodes:
             item=NodeItem(n.id,n.x,n.y*self._vertical,units=self.units,physical_y=n.y)
             scene.addItem(item);self._nodes[n.id]=item
+            if deforming:
+                delta = self._analysis['nodal_displacements'][n.id]
+                ux = self.units.displacement_text(delta['ux_mm'], signed=True)
+                uy = self.units.displacement_text(delta['uy_mm'], signed=True)
+                item.setToolTip(f'{item.toolTip()}\nUx {ux} · Uy {uy}')
             if self.show_ids:
                 self._add_identifier(n.id,self._pos[n.id],node=True)
         for node in session.project.get('cad_drafts',[]):
@@ -275,24 +288,19 @@ class TrussView(QGraphicsView):
             scene.addItem(item);self._drafts[node['id']]=item
             if self.show_ids:
                 self._add_identifier(node['id'],item.pos(),node=True)
-        if self.show_member_ids:
-            for member in model.members:
+        for member in model.members:
+            if member.group in self.member_id_groups:
                 self._add_identifier(member.id, (self._pos[member.i] + self._pos[member.j]) / 2, node=False)
         for nid,(ux,uy) in model.supports.items():
             p=self._pos[nid]
             sign=('XY' if ux and uy else 'Y' if uy else 'X' if ux else '')
-            if sign:self._add_text('△ '+sign,p+QPointF(-80,70),'#62788A',bold=True)
+            if sign:
+                label = AnchoredLabel('△ ' + sign, p, True, '#62788A', bold=True, below=True)
+                scene.addItem(label)
+                self._annotations.append(label)
         self._render_forces(analysis_id)
-        if self.show_deformed and self._analysis:
-            u=self._analysis['nodal_displacements']
-            maxu=max((hypot(v['ux_mm'],v['uy_mm']) for v in u.values()),default=0.)
-            amp=min(1000.,200/max(maxu,.001))
-            deformed={n.id:QPointF(n.x+amp*u[n.id]['ux_mm'],-(n.y+amp*u[n.id]['uy_mm'])*self._vertical) for n in model.nodes}
-            for m in model.members:
-                a,b=deformed[m.i],deformed[m.j]
-                line=QGraphicsLineItem(a.x(),a.y(),b.x(),b.y())
-                pen=QPen(QColor('#16A38C'),1.5,Qt.PenStyle.DashLine);line.setPen(pen);line.setZValue(4);scene.addItem(line)
-            self._add_text(f'Deformada amplificada ×{amp:.1f}',QPointF(min(n.x for n in model.nodes),-max(n.y for n in model.nodes)*self._vertical-400),'#087C69')
+        if deforming:
+            self._draw_deformed(scene, model)
         scene.blockSignals(False)
         with QSignalBlocker(scene):
             for kind, identifier in selection:
@@ -303,6 +311,24 @@ class TrussView(QGraphicsView):
         self._selected()
         if fit or not self._fit_pending:self.fit()
         else:self._place_labels()
+
+    def _draw_deformed(self, scene, model):
+        displacements = self._analysis['nodal_displacements']
+        peak = max((hypot(v['ux_mm'], v['uy_mm']) for v in displacements.values()), default=0.)
+        extent = max(model.span_mm, max(n.y for n in model.nodes) - min(n.y for n in model.nodes))
+        automatic = min(10_000., max(1., extent * .035 / peak)) if peak else 1.
+        amp = automatic if self.deformation_factor is None else self.deformation_factor
+        self.effective_deformation_factor = amp
+        deformed = {}
+        for node, original in self._pos.items():
+            delta = displacements[node]
+            deformed[node] = original + QPointF(amp * delta['ux_mm'], -amp * delta['uy_mm'] * self._vertical)
+        pen = QPen(QColor(DEFORMED), 2, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        for member in model.members:
+            line = scene.addLine(QLineF(deformed[member.i], deformed[member.j]), pen)
+            line.setZValue(13)
+            line.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
     def _render_forces(self, case_id):
         if not self.show_forces or not case_id:
@@ -340,16 +366,15 @@ class TrussView(QGraphicsView):
         if not self.show_load_values:
             for arrow in self._force_items:
                 arrow.label.hide()
-        if not (self.show_load_values and self._force_items) and not self._identifiers:
+        anchored = self._annotations + self._axial_labels + self._identifiers
+        if not (self.show_load_values and self._force_items) and not anchored:
             return
 
         viewport = self.viewport().rect()
         transform = self.viewportTransform()
         occupied = QRegion()
         for item in self.items(viewport):
-            if (isinstance(item, (NodeItem, ForceVectorItem))
-                    or isinstance(item, QGraphicsSimpleTextItem) and item.parentItem() is None
-                    and not isinstance(item, IdentifierItem)):
+            if isinstance(item, (NodeItem, ForceVectorItem)):
                 rect = item.deviceTransform(transform).mapRect(item.boundingRect())
                 occupied += QRegion(rect.toAlignedRect())
 
@@ -373,7 +398,7 @@ class TrussView(QGraphicsView):
                     occupied += QRegion(candidate)
                     break
         inverse, _ = transform.inverted()
-        for label in self._identifiers:
+        for label in anchored:
             label.hide()
             point = transform.map(label.anchor)
             if not viewport.contains(point.toPoint()):
@@ -381,7 +406,9 @@ class TrussView(QGraphicsView):
             bounds = label.boundingRect()
             w, h = bounds.width(), bounds.height()
             gap = 9 if label.node else 5
-            for dx, dy in ((-w/2, -gap-h), (-w/2, gap), (gap, -h/2), (-gap-w, -h/2)):
+            above, below = (-w/2, -gap-h), (-w/2, gap)
+            vertical = (below, above) if label.below else (above, below)
+            for dx, dy in (*vertical, (gap, -h/2), (-gap-w, -h/2)):
                 position = point + QPointF(dx, dy)
                 candidate = QRectF(position, bounds.size()).adjusted(-2, -1, 2, 1).toAlignedRect()
                 if viewport.contains(candidate) and not occupied.intersects(candidate):
@@ -491,7 +518,8 @@ class TrussView(QGraphicsView):
 
     def scrollContentsBy(self, dx, dy):
         super().scrollContentsBy(dx, dy)
-        if getattr(self, '_force_items', None) or getattr(self, '_identifiers', None):
+        if (getattr(self, '_force_items', None) or getattr(self, '_identifiers', None)
+                or getattr(self, '_axial_labels', None) or getattr(self, '_annotations', None)):
             self._place_labels()
 
     def selected_ids(self):

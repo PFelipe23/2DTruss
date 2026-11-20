@@ -37,7 +37,7 @@ Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2D
 - **Excluir**: barra ou nó selecionado, com remoção das barras incidentes e cargas nodais órfãs. Se o resultado não for um modelo geométrico válido, a edição é recusada.
 - Propriedades: edição X/Y, suporte UX/UY, grupo e perfil por grupo.
 - Cargas nodais em kgf, tf, kN ou N. Padrões distribuídos usam intensidade, direção, zona e base de comprimento para obter as resultantes nodais.
-- Resultados: esforços por caso/combinação, modos de envoltória (tração e compressão), pesquisa de dez barras críticas, exportação CSV DimPerfil e memorial HTML A3.
+- Resultados: esforços axiais e deslocamentos nodais por caso ou combinação, modos de envoltória de tração e compressão, pesquisa de dez barras críticas, exportação CSV DimPerfil e memorial HTML A3.
 - `F5` calcula. `Ctrl+S`, `Ctrl+O`, `Ctrl+Z`, `Ctrl+Y` e `Delete` disponibilizam comandos convencionais.
 
 Todas as edições estruturais invalidam os resultados anteriores. Não há um solver no viewport.
@@ -95,11 +95,11 @@ Os três ícones de definição de cargas abrem janelas flutuantes. O desenho co
 
 Em **Inserir cargas nodais**, escolha ou crie um padrão nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a força, selecione vários nós com Ctrl+clique e use **Aplicar a n nós selecionados**. Clique numa parcela da tabela para editar ou remover a linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
 
-Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A cauda fica junto ao nó nas cargas ascendentes, e a ponta fica junto ao nó nas descendentes. Nas cargas puramente horizontais, o critério usa o sinal de `Fx`. O comprimento da seta é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` na unidade de exibição. **Valores** posiciona os rótulos em espaços livres. Passe o cursor sobre a seta ou o nó para ver as componentes.
+Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A cauda fica junto ao nó nas cargas ascendentes, e a ponta fica junto ao nó nas descendentes. Nas cargas puramente horizontais, o critério usa o sinal de `Fx`. O comprimento da seta é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` na unidade de exibição. Os valores e fatores de carregamento são exibidos com duas casas decimais. **Valores** coloca os rótulos em caixas com fundo opaco. Passe o cursor sobre a seta ou o nó para ver as componentes.
 
 ### Unidades de exibição
 
-O ícone de régua junto ao botão **Calcular** seleciona força, comprimento, tensão e casas decimais. A convenção nominal usa **1,00 tf = 1.000 kgf = 10,00 kN** e **1,000 m = 1.000 mm = 100,0 cm**. Para tensão axial, o padrão é **MPa com duas casas**. Também é possível exibir `σ = N/A` em força por comprimento ao quadrado, por exemplo kgf/cm².
+O ícone de régua junto ao botão **Calcular** seleciona força, comprimento, tensão e casas decimais. A convenção nominal do modelo utiliza `1 kgf = 10 N`. A configuração de tensão em MPa ou força por comprimento ao quadrado fica disponível no seletor.
 
 As preferências são gravadas localmente. O seletor atualiza o desenho, as propriedades e os resultados calculados sem alterar o projeto. Os formulários de carga conservam a unidade que identifica cada entrada, e os formatos de arquivo mantêm suas unidades documentadas.
 
@@ -107,9 +107,16 @@ As preferências são gravadas localmente. O seletor atualiza o desenho, as prop
 
 À esquerda, **Propriedades** resume o objeto selecionado. **Modelo** filtra nós e barras por ID ou grupo e **Tarefas** abre as ferramentas do editor. À direita, as abas apresentam controles de coordenadas e apoios para nós, cargas nodais para seleção em nós e edição de grupo e perfil para barras. O botão de painel no canto superior direito do desenho recolhe ou expande o editor.
 
-O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas e o estado da análise. Grade, snap, identificadores de nós e identificadores de barras têm controles independentes na barra superior. A vista 2D prioriza rótulos com espaço livre e revela mais identificadores ao aproximar.
+O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas e o estado da análise. Grade, snap e identificadores de nós têm controles independentes. O menu de identificadores das barras permite escolher banzos superior e inferior, montantes e diagonais. A vista 2D reposiciona as caixas de texto após mudar o zoom.
 
-`F5` calcula e abre a tabela inferior. Clique numa linha para inspecionar a barra ou use **Detalhar** para consultar filtros e envoltórias. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
+`F5` calcula e abre o painel inferior. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
+
+### Resultados 2D
+
+- **Esforços axiais** colore a tração em vermelho, a compressão em azul e os valores nulos em cinza. A tabela ordena as barras pela magnitude de `N`. Use **Valores no diagrama** para alternar os rótulos e **Detalhar esforços e envoltórias** para consultar filtros e extremos por barra.
+- **Deformações** sobrepõe a deformada tracejada à geometria original. O painel indica o nó com maior magnitude de `Uy` e lista `Ux`, `Uy` e a magnitude do deslocamento por nó. A amplificação automática ou manual afeta a representação gráfica. Os valores da tabela são deslocamentos reais.
+
+O seletor de carregamento atualiza o diagrama e a tabela. Clique numa linha para localizar a barra ou o nó no desenho.
 
 ## Perfis, aço e vista 3D
 

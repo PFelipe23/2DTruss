@@ -11,13 +11,64 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_result_views_select_diagrams_and_keep_displacements_unscaled(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from math import hypot
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QApplication, QGraphicsLineItem
+        from desktop.qt.app import DesktopApp
+        from desktop.qt.viewport import BoxedLabel
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            window.cases.setCurrentText('S_GRAV')
+            window.calculate()
+            app.processEvents()
+            self.assertTrue(window.view.show_efforts)
+            boxes = []
+            for item in window.view.scene().items():
+                if isinstance(item, BoxedLabel) and item.isVisible():
+                    rect = item.deviceTransform(window.view.viewportTransform()).mapRect(item.boundingRect())
+                    self.assertFalse(any(box.intersects(rect) for box in boxes))
+                    boxes.append(rect)
+            self.assertGreater(len(boxes), 2)
+
+            window.result_views.setCurrentIndex(1)
+            self.assertFalse(window.view.show_efforts)
+            self.assertTrue(window.view.show_deformed)
+            table = window.quick_table
+            self.assertEqual(table.horizontalHeaderItem(2).text(), 'Uy (mm)')
+            data = window.session.result['analyses']['S_GRAV']['nodal_displacements']
+            node, delta = max(data.items(), key=lambda pair: hypot(pair[1]['ux_mm'], pair[1]['uy_mm']))
+            self.assertEqual(table.item(0, 0).text(), node)
+            self.assertEqual(table.item(0, 2).text(),
+                             window.units.displacement_text(delta['uy_mm'], signed=True, unit=False))
+            revision = window.session.revision
+            window.auto_deformation.setChecked(False)
+            window.deformation_scale.setValue(50)
+            self.assertEqual(window.view.effective_deformation_factor, 50)
+            self.assertEqual(window.session.revision, revision)
+            member = window.session.model.members[0]
+            expected = window.view._pos[member.i] + QPointF(50 * data[member.i]['ux_mm'],
+                                                             -50 * data[member.i]['uy_mm'])
+            mesh = [item.line() for item in window.view.scene().items()
+                    if isinstance(item, QGraphicsLineItem) and item.zValue() == 13]
+            self.assertEqual(len(mesh), len(window.session.model.members))
+            self.assertIn(expected, [segment.p1() for segment in mesh])
+            window.quick_select_result(0, 0)
+            self.assertEqual(window.view.selected_ids(), [('node', node)])
+        finally:
+            window.close()
+
     def test_display_units_convert_results_and_keep_the_model_revision(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from tempfile import TemporaryDirectory
         from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QApplication
         from desktop.qt.app import DesktopApp
-        from desktop.qt.display_units import DisplayUnits
+        from desktop.qt.display_units import DisplayUnits, LoadField
 
         app = QApplication.instance() or QApplication([])
         self.assertEqual([DisplayUnits(force=unit).force_text(10_000) for unit in ('tf', 'kgf', 'kN')],
@@ -28,6 +79,11 @@ class QtRedesignSmoke(unittest.TestCase):
         units = DisplayUnits('kgf', 'cm', 'derived')
         self.assertEqual(units.stress_text(25), '250,00 kgf/cm²')
         self.assertEqual(DisplayUnits(force_digits=3).force_text(10_000), '10,000 kN')
+        self.assertEqual(DisplayUnits(force_digits=3).force_text(10_000, load=True), '10,00 kN')
+        field = LoadField(-100, 100)
+        field.set_stored_value(2.3456)
+        self.assertEqual(field.text(), '2,35')
+        self.assertEqual(field.submitted_value(), 2.3456)
         with TemporaryDirectory() as directory:
             settings = QSettings(str(Path(directory) / 'display.ini'), QSettings.Format.IniFormat)
             units.save(settings)
@@ -42,18 +98,19 @@ class QtRedesignSmoke(unittest.TestCase):
             window.set_units(units)
             self.assertEqual(window.session.revision, revision)
             self.assertIs(window.session.result, result)
-            self.assertEqual(window.quick_table.horizontalHeaderItem(3).text(), 'σ (kgf/cm²)')
+            self.assertEqual(window.quick_table.horizontalHeaderItem(2).text(), 'N (kgf)')
+            self.assertEqual(window.quick_table.horizontalHeaderItem(3).text(), 'Seção')
             member = window.quick_table.item(0, 0).text()
-            record = next(item for item in window.session.model.members if item.id == member)
             axial = result['analyses'][window.case_id]['axial_n'][member]
-            self.assertEqual(window.quick_table.item(0, 3).text(),
-                             units.stress_text(axial / record.area, signed=True, unit=False))
-            window._set_overlay('show_member_ids', True)
+            self.assertEqual(window.quick_table.item(0, 2).text(), units.force_text(axial, signed=True, unit=False))
+            window.member_tag_checks['diagonal'].setChecked(True)
             self.assertTrue(window.view._identifiers)
             self.assertTrue(all(not label.node for label in window.view._identifiers))
+            self.assertEqual({label.text() for label in window.view._identifiers},
+                             {m.id for m in window.session.model.members if m.group == 'diagonal'})
             window._set_overlay('show_ids', True)
             self.assertTrue(any(label.node for label in window.view._identifiers))
-            window._set_overlay('show_member_ids', False)
+            window.member_tag_checks['diagonal'].setChecked(False)
             self.assertTrue(all(label.node for label in window.view._identifiers))
         finally:
             window.close()
@@ -286,7 +343,7 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertTrue(window.results_panel.isVisible())
             self.assertGreater(window.quick_table.rowCount(), 0)
             self.assertEqual(window.view.selected_ids(), [key])
-            window.quick_select_member(0, 0)
+            window.quick_select_result(0, 0)
             first_result = ('member', window.quick_table.item(0, 0).text())
             self.assertEqual(window.view.selected_ids(), [first_result])
             self.assertTrue(window._model_items[first_result].isSelected())

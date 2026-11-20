@@ -2,7 +2,7 @@
 from dataclasses import asdict, dataclass
 
 from PySide6.QtCore import QLocale
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
                                QFormLayout, QLabel, QSpinBox, QVBoxLayout)
 
 from poe_truss.units import FORCE_TO_N, LENGTH_TO_MM
@@ -60,17 +60,50 @@ class DisplayUnits:
     def stress(self):
         return 'MPa' if self.stress_mode == 'MPa' else f'{self.force}/{self.length}²'
 
-    def force_text(self, value, *, signed=False, unit=True):
-        text = format_number(value / FORCE_TO_N[self.force], self.force_precision, signed)
+    def force_text(self, value, *, signed=False, unit=True, load=False):
+        text = format_number(value / FORCE_TO_N[self.force], 2 if load else self.force_precision, signed)
         return f'{text} {self.force}' if unit else text
 
-    def length_text(self, value):
-        return f'{format_number(value / self.length_scale, self.length_precision)} {self.length}'
+    def length_text(self, value, *, signed=False, unit=True, precision=None):
+        digits = self.length_precision if precision is None else precision
+        text = format_number(value / self.length_scale, digits, signed)
+        return f'{text} {self.length}' if unit else text
+
+    def displacement_text(self, value, *, signed=False, unit=True):
+        precision = {'mm': 2, 'cm': 3, 'm': 5}[self.length] if self.length_digits is None else self.length_digits
+        return self.length_text(value, signed=signed, unit=unit, precision=precision)
 
     def stress_text(self, value_mpa, *, signed=False, unit=True):
         scale = 1 if self.stress_mode == 'MPa' else self.length_scale ** 2 / FORCE_TO_N[self.force]
         text = format_number(value_mpa * scale, self.stress_digits, signed)
         return f'{text} {self.stress}' if unit else text
+
+
+class LoadField(QDoubleSpinBox):
+    """Exibe duas casas e preserva parcelas antigas sem edição."""
+
+    def __init__(self, minimum, maximum, step=1.0):
+        super().__init__()
+        self.setLocale(LOCALE)
+        self.setDecimals(2)
+        self.setRange(minimum, maximum)
+        self.setSingleStep(step)
+        self.setGroupSeparatorShown(True)
+        self.set_stored_value(0.0)
+        self.lineEdit().textEdited.connect(self._record_edit)
+
+    def _record_edit(self, _text):
+        self._edited = True
+
+    def set_stored_value(self, value):
+        self.setValue(value)
+        self._original = value
+        self._rounded = self.value()
+        self._edited = False
+
+    def submitted_value(self):
+        value = self.value()
+        return self._original if value == self._rounded and not self._edited else value
 
 
 class UnitsDialog(QDialog):
@@ -82,7 +115,6 @@ class UnitsDialog(QDialog):
         heading = QLabel('Unidades de exibição')
         heading.setObjectName('dialogHeading')
         layout.addWidget(heading)
-        layout.addWidget(QLabel('1,00 tf = 1.000 kgf = 10,00 kN\n1,000 m = 1.000 mm = 100,0 cm'))
         form = QFormLayout()
         self.force = QComboBox()
         self.force.addItems(FORCE_DIGITS)
@@ -107,7 +139,7 @@ class UnitsDialog(QDialog):
         form.addRow('Comprimento', self.length)
         form.addRow('Tensão', self.stress)
         form.addRow(self.custom)
-        form.addRow('Casas da força', self.force_digits)
+        form.addRow('Casas dos esforços', self.force_digits)
         form.addRow('Casas do comprimento', self.length_digits)
         form.addRow('Casas da tensão', self.stress_digits)
         layout.addLayout(form)

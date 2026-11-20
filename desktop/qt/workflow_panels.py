@@ -18,6 +18,7 @@ from poe_truss.loads import load_patterns, resolve_case_loads
 from poe_truss.materials import STEEL_GRADES
 from poe_truss.search import suggest_geometry
 from .action_icons import IconButton
+from .display_units import LoadField
 from .profile_picker import ProfilePicker
 
 
@@ -186,7 +187,7 @@ class WorkflowMixin:
         self.action_reference = QLabel()
         self.action_reference.setWordWrap(True)
         self.action_class.currentIndexChanged.connect(self._show_action_reference)
-        self.action_value=field(0,0,1e9,3,1)
+        self.action_value=LoadField(0,1e9)
         self.action_force_unit=QComboBox();self.action_force_unit.addItems(['kgf','kN','tf','N'])
         self.action_application = labeled_combo([('top', 'Banzo superior'), ('bottom', 'Banzo inferior')])
         self.action_basis = labeled_combo([('projected', 'Projeção horizontal'),
@@ -239,7 +240,7 @@ class WorkflowMixin:
         case=next((x for x in load_patterns(self.session.project) if x['id']==cid),None)
         if not case:
             self.action_name.clear()
-            self.action_value.setValue(0)
+            self.action_value.set_stored_value(0)
             return
         self.action_force_unit.setCurrentText(case.get('force_unit', 'kgf'))
         pairs=[(self.action_kind,case.get('kind','surface')),
@@ -252,7 +253,7 @@ class WorkflowMixin:
                 combo.setCurrentIndex(combo.findData(key))
         self.action_name.setText(case.get('name',cid))
         self.action_class.setCurrentIndex(self.action_class.findData(workflow.pattern_class(case)))
-        self.action_value.setValue(float(case.get('value',0)))
+        self.action_value.set_stored_value(float(case.get('value',0)))
         self._case_controls()
 
     def _audit_selected_case(self):
@@ -262,8 +263,8 @@ class WorkflowMixin:
         if not case:return
         try:
             _,audit=resolve_case_loads(self.session.model,case,patterns)
-            fx = self.units.force_text(audit['sum_fx_n'], signed=True)
-            fy = self.units.force_text(audit['sum_fy_n'], signed=True)
+            fx = self.units.force_text(audit['sum_fx_n'], signed=True, load=True)
+            fy = self.units.force_text(audit['sum_fy_n'], signed=True, load=True)
             self.action_audit.setText(f'{cid} · {audit["n_entries"]} parcelas · ΣFx {fx} · ΣFy {fy}')
             self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Auditoria de ações',str(e))
@@ -287,9 +288,14 @@ class WorkflowMixin:
         cid=self.action_case.currentText()
         if not cid:return
         try:
+            original = next(row for row in load_patterns(self.session.project) if row['id'] == cid)
+            force_unit = self.action_force_unit.currentText()
+            intensity = (self.action_value.submitted_value()
+                         if force_unit == original.get('force_unit', 'kgf')
+                         else self.action_value.value())
             p=workflow.update_load_case(self.session.project,cid,
                 name=self.action_name.text(),kind=self.action_kind.currentData(),
-                value=self.action_value.value(),force_unit=self.action_force_unit.currentText(),
+                value=intensity,force_unit=force_unit,
                 application=self.action_application.currentData(),basis=self.action_basis.currentData(),
                 direction=self.action_direction.currentData(),zone=self.action_zone.currentData(),
                 action_class=self.action_class.currentData())
@@ -354,12 +360,12 @@ class WorkflowMixin:
             table.setItem(i, 0, item)
             spin = table.cellWidget(i, 1)
             if spin is None:
-                spin = field(0, -1e6, 1e6, 6, .1)
+                spin = LoadField(-1e6, 1e6, .1)
                 table.setCellWidget(i, 1, spin)
-            spin.setValue(float(factors.get(identifier, 0)))
+            spin.set_stored_value(float(factors.get(identifier, 0)))
 
     def _read_factors(self, table):
-        return {table.item(i, 0).text(): table.cellWidget(i, 1).value()
+        return {table.item(i, 0).text(): table.cellWidget(i, 1).submitted_value()
                 for i in range(table.rowCount())}
 
     def _populate_static_case(self, *_):

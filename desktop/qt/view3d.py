@@ -516,8 +516,7 @@ class Truss3DView(QWidget):
                f'L = {self.units.length_text(self.session.model.member_length(m))}',
                f'Componentes: {meta.get("components","?")}']
         if n is not None:
-            lines.extend((f'N = {self.units.force_text(n, signed=True)}',
-                          f'σ = {self.units.stress_text(n / m.area, signed=True)}'))
+            lines.append(f'N = {self.units.force_text(n, signed=True)}')
         lines.extend(escape(str(v)) for v in meta.get('notes',[]))
         self.selected_label.setText('<br>'.join(lines))
 
