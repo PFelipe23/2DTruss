@@ -74,14 +74,22 @@ def workspace_palette():
 STYLE = r'''
 QMainWindow, QWidget {font-family:"Segoe UI",Arial;font-size:9pt;color:#263B4D;}
 QMainWindow {background:#F3F6F9;}
-QDialog#workspaceDialog, QWidget#loadDialogPage {background:#F3F6F9;}
-QScrollArea#loadDialogScroll {background:#F3F6F9;}
+QDialog {background:#F2F6FA;}
+QFrame#dialogSurface {background:#FFFFFF;border:1px solid #CEDDE9;border-radius:7px;}
+QWidget#loadDialogPage, QScrollArea#loadDialogScroll {background:#FFFFFF;}
 QTableWidget#factorTable QDoubleSpinBox {min-height:17px;padding:3px;}
 QFrame#quickAccess {background:#182B3C;}
 QLabel#appHeader {color:#FFFFFF;font-weight:700;padding:0 14px 0 3px;}
 QLabel#unitSummary {color:#D6E8F4;padding:0 5px 0 1px;}
 QLabel#unitsSample {background:#EAF4FA;border:1px solid #CFDFEA;border-radius:4px;padding:8px;}
-QLabel#dialogHeading {font-weight:700;color:#183850;background:#E6F0F7;padding:8px;border-radius:4px;}
+QLabel#dialogHeading {font-size:12pt;font-weight:700;color:#FFFFFF;background:#1C3852;padding:11px 14px;border-radius:6px;}
+QDialogButtonBox#dialogActions QPushButton {min-width:74px;padding:6px 12px;background:#FFFFFF;}
+QDialogButtonBox#dialogActions QPushButton:default {background:#176B9B;color:#FFFFFF;border-color:#176B9B;}
+QDialogButtonBox#dialogActions QPushButton:default:hover {background:#11537B;}
+QDialogButtonBox#dialogActions QPushButton:hover {border-color:#719FBB;}
+QMenu {background:#FFFFFF;border:1px solid #BCCDD9;padding:4px;border-radius:5px;}
+QMenu::item {padding:5px 24px 5px 22px;}
+QMenu::item:selected {background:#E3F0F8;color:#164762;border-radius:3px;}
 QMenu#memberTagsMenu {background:#F3F7FA;border:1px solid #BCCDD9;}
 QFrame#quickAccess QToolButton {color:#F2F7FB;background:#263C50;border-color:#40586C;padding:5px 2px;}
 QFrame#quickAccess QToolButton:hover, QFrame#quickAccess QToolButton:checked {background:#3C5C74;}
@@ -125,6 +133,7 @@ QLabel#viewMode {color:#17658C;font-weight:700;}
 QFrame#forceBar {background:#FFF8ED;border-bottom:1px solid #E9D8BD;}
 QFrame#forceBar QLabel {color:#784517;}
 QFrame#envelopeDetails {background:#FFFFFF;border:1px solid #AABCCB;border-radius:4px;}
+QLabel#envelopeTitle {font-size:10pt;font-weight:700;background:#E7F0F7;color:#1C3852;padding:5px 7px;border-radius:3px;}
 QLabel#calcPending {color:#78521A;background:#FFF0D5;border-radius:4px;padding:3px 8px;}
 QLabel#calcReady {color:#146147;background:#DCF2E8;border-radius:4px;padding:3px 8px;}
 '''

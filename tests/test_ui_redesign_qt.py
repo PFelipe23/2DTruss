@@ -33,7 +33,12 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertTrue(window.view.show_envelope)
             labels = [label for label in window.view._axial_labels if isinstance(label, EnvelopeLabel)]
             self.assertEqual(len(labels), len(window.session.model.members))
-            self.assertEqual({label.font().pointSize() for label in labels}, {6, 10})
+            self.assertEqual({label.font().pointSize() for label in labels}, {10})
+            self.assertEqual({label.member_id for label in labels if label.isVisible()},
+                             {label.member_id for label in labels if label.peak})
+            secondary = next(label for label in labels if not label.peak)
+            window._set_canvas_selection([('member', secondary.member_id)])
+            self.assertTrue(secondary.isVisible())
             visible = next(label for label in labels if label.isVisible())
             position = visible.deviceTransform(window.view.viewportTransform()).map(visible.boundingRect().center())
             with patch.object(EnvelopeLabel, 'popup', autospec=True) as popup:
@@ -71,6 +76,45 @@ class QtRedesignSmoke(unittest.TestCase):
                 self.assertTrue(callout.isVisible())
                 self.assertIn(window.units.displacement_text(data[node]['uy_mm'], signed=True), callout.text())
         finally:
+            window.close()
+
+    def test_els_deformation_uses_a_governing_combination_and_node_restraint_is_independent(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtWidgets import QApplication
+        from desktop.bridge import Session, load_project
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        project = load_project()
+        project['combinations'].extend([
+            {'id': 'ELS_MENOR', 'combination_class': 'sls_rare', 'factors': {'W_UP': .25}},
+            {'id': 'ELS_CRITICO', 'combination_class': 'sls_frequent', 'factors': {'W_DOWN': 1}},
+        ])
+        window = DesktopApp(Session(project))
+        window.show()
+        try:
+            window.calculate()
+            self.assertEqual(window.axial_source.findData('els'), -1)
+            window.result_views.setCurrentIndex(1)
+            self.assertEqual(window.case_id, 'ELS_CRITICO')
+            self.assertEqual(window.view._analysis_id, 'ELS_CRITICO')
+            self.assertIn('ELS_CRITICO', window.dock_info.text())
+            window.deformation_case.setCurrentIndex(window.deformation_case.findData('ELS_MENOR'))
+            self.assertEqual(window.case_id, 'ELS_MENOR')
+            self.assertIn('ELS_MENOR', window.dock_info.text())
+            window.result_views.setCurrentIndex(0)
+            window._set_canvas_selection([('node', 'T02')])
+            window._update_selection([('node', 'T02')])
+            window.node_lateral.setChecked(True)
+            window.node_lateral_reference.setText('Detalhe T1')
+            window.apply_node_properties()
+            model = window.session.model
+            self.assertNotIn('model_override', window.session.project)
+            self.assertNotIn('T02', model.supports)
+            self.assertEqual(window.view._nodes['T02'].restraint['reference'], 'Detalhe T1')
+            self.assertIsNone(window.session.result)
+        finally:
+            window._dirty = False
             window.close()
 
     def test_result_views_select_diagrams_and_keep_displacements_unscaled(self):

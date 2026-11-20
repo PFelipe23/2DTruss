@@ -7,7 +7,7 @@ from __future__ import annotations
 from html import escape
 from itertools import chain
 from math import ceil,floor,hypot,isclose,isfinite,log10
-from PySide6.QtCore import Qt,QLineF,QPointF,QSignalBlocker,Signal,QRectF
+from PySide6.QtCore import Qt,QLineF,QPointF,QSignalBlocker,Signal,QRect,QRectF
 from PySide6.QtGui import QColor,QPen,QBrush,QFont,QFontMetricsF,QPainter,QPainterPath,QRegion
 from PySide6.QtWidgets import (QGraphicsView,QGraphicsScene,QGraphicsEllipseItem,
                                QGraphicsLineItem,QGraphicsPathItem,QGraphicsSimpleTextItem,QGraphicsItem,
@@ -24,9 +24,10 @@ DISPLACEMENT_PEAK = '#985215'
 
 
 class NodeItem(QGraphicsEllipseItem):
-    def __init__(self,node_id,x,y,*,draft=False, units=DEFAULT_UNITS, physical_y=None):
+    def __init__(self,node_id,x,y,*,draft=False, units=DEFAULT_UNITS, physical_y=None, restraint=None):
         super().__init__(-NODE_RADIUS,-NODE_RADIUS,2 * NODE_RADIUS,2 * NODE_RADIUS)
         self.node_id=node_id;self.draft=draft
+        self.restraint = restraint
         self.setPos(x,-y)
         self.setZValue(30)
         self.setPen(QPen(QColor('#1779A7' if not draft else '#DE8A20'),1.7))
@@ -34,17 +35,32 @@ class NodeItem(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable,True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations,True)
         xy = f'X={units.length_text(x)}, Y={units.length_text(y if physical_y is None else physical_y)}'
-        self.setToolTip(f'Nó {node_id} | {xy}' + (' | rascunho' if draft else ''))
+        tip = f'Nó {node_id} | {xy}' + (' | rascunho' if draft else '')
+        if restraint:
+            state = 'Declarado' if restraint['confirmed'] else 'Rever'
+            tip += f'\nTravamento fora do plano · {state} · {restraint["reference"]}'
+        self.setToolTip(tip)
+
+    def boundingRect(self):
+        rect = super().boundingRect()
+        return rect.adjusted(0, -5, 5, 0) if getattr(self, 'restraint', None) else rect
 
     def paint(self, painter, option, widget=None):
         if not self.isSelected():
             super().paint(painter, option, widget)
-            return
-        painter.save()
-        painter.setPen(self.pen())
-        painter.setBrush(QColor('#BCE1F3'))
-        painter.drawEllipse(self.rect())
-        painter.restore()
+        else:
+            painter.save()
+            painter.setPen(self.pen())
+            painter.setBrush(QColor('#BCE1F3'))
+            painter.drawEllipse(self.rect())
+            painter.restore()
+        if self.restraint:
+            confirmed = self.restraint['confirmed']
+            painter.save()
+            painter.setPen(QPen(QColor('#67449B' if confirmed else '#945719'), 1))
+            painter.setBrush(QColor('#67449B' if confirmed else '#FFF1C2'))
+            painter.drawRoundedRect(QRectF(4, -10, 5, 5), 1, 1)
+            painter.restore()
 
 
 class MemberItem(QGraphicsLineItem):
@@ -163,11 +179,12 @@ class EnvelopeLabel(AnchoredLabel):
         self.member_id = member
         self.details = details
         self.values = values
+        self.peak = peak
         font = self.font()
-        font.setPointSize(10 if peak else 6)
+        font.setPointSize(10)
         self.setFont(font)
         metrics = QFontMetricsF(self.font())
-        width = max(map(metrics.horizontalAdvance, values)) + (10 if peak else 6)
+        width = max(map(metrics.horizontalAdvance, values)) + 10
         self._rect = QRectF(0, 0, width, 2 * (metrics.height() + 1))
         self.leader = QGraphicsLineItem(self)
         self.leader.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent)
@@ -190,7 +207,11 @@ class EnvelopeLabel(AnchoredLabel):
         popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         layout = QVBoxLayout(popup)
         layout.setContentsMargins(10, 7, 10, 8)
-        layout.addWidget(QLabel(f'<div style="font-size:10pt"><b>{escape(self.member_id)}</b><br>{lines}</div>'))
+        title = QLabel(f'Barra {self.member_id}')
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        title.setObjectName('envelopeTitle')
+        layout.addWidget(title)
+        layout.addWidget(QLabel(f'<div style="font-size:10pt">{lines}</div>'))
         popup.adjustSize()
         screen = widget.screen().availableGeometry()
         x = min(position.x() + 10, screen.right() - popup.width())
@@ -369,8 +390,9 @@ class TrussView(QGraphicsView):
             scene.addItem(item);self._members[m.id]=item
         if self.show_efforts and self.show_axial_values:
             self._draw_axial_labels(scene, model, envelope, {} if self.show_envelope else force)
+        markings = (session.project.get('stability') or {}).get('nodal_restraints', {})
         for n in model.nodes:
-            item=NodeItem(n.id,n.x,n.y*self._vertical,units=self.units,physical_y=n.y)
+            item=NodeItem(n.id,n.x,n.y*self._vertical,units=self.units,physical_y=n.y,restraint=markings.get(n.id))
             scene.addItem(item);self._nodes[n.id]=item
             if deforming:
                 delta = self._analysis['nodal_displacements'][n.id]
@@ -463,6 +485,8 @@ class TrussView(QGraphicsView):
 
     def sync_displacement_selection(self):
         if not self._deformed_nodes:
+            if self.show_envelope and self._axial_labels:
+                self._place_labels()
             return
         selected = self.selected_ids()
         node = selected[0][1] if len(selected) == 1 and selected[0][0] == 'node' else None
@@ -529,7 +553,14 @@ class TrussView(QGraphicsView):
                 inspection.append(label)
         axial = self._axial_labels
         if axial and isinstance(axial[0], EnvelopeLabel):
-            axial = sorted(axial, key=lambda label: -label.font().pointSize())
+            selected = {member for kind, member in self.selected_ids() if kind == 'member'}
+            displayed = []
+            for label in axial:
+                if label.peak or label.member_id in selected:
+                    displayed.append(label)
+                else:
+                    label.hide()
+            axial = sorted(displayed, key=lambda label: label.member_id not in selected)
         anchored = self._annotations + axial + self._identifiers
         if not (self.show_load_values and self._force_items) and not (anchored or inspection):
             return
@@ -577,15 +608,14 @@ class TrussView(QGraphicsView):
             above, below = (-w/2, -gap-h), (-w/2, gap)
             vertical = (below, above) if label.below else (above, below)
             offsets = (*vertical, (gap, -h/2), (-gap-w, -h/2))
-            if isinstance(label, EnvelopeLabel):
-                offsets = chain(offsets, self._envelope_offsets(point, viewport, w, h))
-            if allow_extra_rows:
+            room = allow_extra_rows or isinstance(label, EnvelopeLabel)
+            if room:
                 offsets = chain(offsets, ((x, y + (h + 4) * step * direction)
                                           for (x, y), direction in ((above, -1), (below, 1))
                                           for step in (1, 2)))
             for dx, dy in offsets:
                 x = point.x() + dx
-                if allow_extra_rows:
+                if room:
                     x = max(viewport.left() + 2, min(x, viewport.right() - w - 2))
                 position = QPointF(x, point.y() + dy)
                 candidate = QRectF(position, bounds.size()).adjusted(-2, -1, 2, 1).toAlignedRect()
@@ -601,17 +631,6 @@ class TrussView(QGraphicsView):
                     label.show()
                     occupied += QRegion(candidate)
                     break
-
-    def _envelope_offsets(self, point, viewport, width, height):
-        for dy in (0, -height - 4, height + 4, -2 * height - 8, 2 * height + 8):
-            for dx in (-width / 2, 8, -width - 8, 20, -width - 20):
-                yield dx, dy - height / 2
-        # Fallback de barras próximas em geometrias densas, com linha-guia.
-        step_x, step_y = ceil(width) + 5, ceil(height) + 5
-        grid = [(x - point.x(), y - point.y())
-                for y in range(viewport.top() + 2, viewport.bottom() - ceil(height), step_y)
-                for x in range(viewport.left() + 3, viewport.right() - ceil(width), step_x)]
-        yield from sorted(grid, key=lambda offset: hypot(offset[0], offset[1]))
 
     def fit(self):
         if not self._model:return
@@ -665,18 +684,50 @@ class TrussView(QGraphicsView):
     def _items_at(self,viewport_point):
         return self.items(viewport_point)
 
+    def _nearby_member(self, point):
+        rect = QRect(point.x() - 5, point.y() - 5, 11, 11)
+        transform = self.viewportTransform()
+        nearest = None
+        distance = 5.
+        for item in self.items(rect):
+            if not isinstance(item, MemberItem):
+                continue
+            a, b = transform.map(item.line().p1()), transform.map(item.line().p2())
+            dx, dy = b.x() - a.x(), b.y() - a.y()
+            length2 = dx * dx + dy * dy
+            if not length2:
+                continue
+            t = max(0., min(1., ((point.x() - a.x()) * dx + (point.y() - a.y()) * dy) / length2))
+            delta = hypot(point.x() - a.x() - t * dx, point.y() - a.y() - t * dy)
+            if delta < distance:
+                nearest, distance = item, delta
+        return nearest
+
     def mousePressEvent(self,event):
-        if event.button() == Qt.MouseButton.LeftButton and self.tool == 'select' and self.show_envelope:
-            label = next((item for item in self._items_at(event.position().toPoint())
-                          if isinstance(item, EnvelopeLabel)), None)
+        if (event.button() == Qt.MouseButton.LeftButton and self.tool == 'select'
+                and self.show_envelope and self.show_efforts):
+            point = event.position().toPoint()
+            hit = self._items_at(point)
+            label = next((item for item in hit if isinstance(item, EnvelopeLabel)), None)
             if label is not None:
                 with QSignalBlocker(self.scene()):
                     self.scene().clearSelection()
                     self._members[label.member_id].setSelected(True)
                 self._selected()
-                self._pressed_envelope_member = label.member_id
+                self._pressed_envelope_member = label.member_id, point
                 event.accept()
                 return
+            if self._axial_labels and not any(isinstance(item, NodeItem) for item in hit):
+                member = self._nearby_member(point)
+                if member is not None:
+                    multiple = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+                    with QSignalBlocker(self.scene()):
+                        if not multiple:
+                            self.scene().clearSelection()
+                        member.setSelected(not member.isSelected() if multiple else True)
+                    self._selected()
+                    event.accept()
+                    return
         if event.button() == Qt.MouseButton.LeftButton and self.tool == 'select' and self._deformed_nodes:
             hit = self._items_at(event.position().toPoint())
             node = next((item for item in hit if isinstance(item, (NodeItem, DeformedNodeItem))), None)
@@ -719,10 +770,10 @@ class TrussView(QGraphicsView):
 
     def mouseReleaseEvent(self,event):
         if event.button() == Qt.MouseButton.LeftButton and self._pressed_envelope_member is not None:
-            member, self._pressed_envelope_member = self._pressed_envelope_member, None
-            label = next((item for item in self._items_at(event.position().toPoint())
+            (member, origin), self._pressed_envelope_member = self._pressed_envelope_member, None
+            label = next((item for item in self._axial_labels
                           if isinstance(item, EnvelopeLabel) and item.member_id == member), None)
-            if label:
+            if label and (event.position().toPoint() - origin).manhattanLength() <= 8:
                 label.popup(event.globalPosition().toPoint(), self.viewport())
             event.accept()
             return

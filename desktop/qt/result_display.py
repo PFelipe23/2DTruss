@@ -29,6 +29,12 @@ def envelope_details(extremes, units):
 def displacement_resultant(delta):
     return hypot(delta['ux_mm'], delta['uy_mm'])
 
+def governing_els_case(result):
+    cases = result.get('envelope_combinations', {}).get('els', [])
+    return max(cases, key=lambda case: max(
+        abs(delta['uy_mm']) for delta in result['analyses'][case]['nodal_displacements'].values()),
+        default=None)
+
 
 def displacement_peaks(displacements):
     """Um nó representativo por extremo de Y e pelo maior deslocamento total."""

@@ -28,7 +28,9 @@ from poe_truss.version import APP_NAME, TAG
 from .action_icons import action_icon, IconButton as _button
 from .display_units import DisplayUnits, LOCALE, LoadField, UnitsDialog, format_number
 from .manual_resistance_dialog import ManualResistanceDialog
-from .result_display import displacement_resultant, envelope_details, envelope_rank, envelope_values, selected_envelope
+from .workspace_dialog import WorkspaceDialog
+from .result_display import (displacement_resultant, envelope_details, envelope_rank, envelope_values,
+                             governing_els_case, selected_envelope)
 from .viewport import COMP, DEFORMED, DISPLACEMENT_PEAK, TENS, TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
@@ -44,13 +46,12 @@ def _spin(value,minimum,maximum,decimals=2,step=1):
     return e
 
 
-class CadDialog(QDialog):
+class CadDialog(WorkspaceDialog):
     """Conferência obrigatória: unidades, layers e malha importada."""
     def __init__(self,preview:cad_io.CadPreview,parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Conferência da importação CAD — confirmar topologia')
+        super().__init__('Conferência da importação CAD', parent)
         self.resize(920,650);self.preview=preview
-        layout=QVBoxLayout(self)
+        layout=self.body
         title=QLabel(f'<b>{preview.source}</b> — {len(preview.nodes)} nós · {len(preview.members)} barras · {preview.units_source}')
         layout.addWidget(title)
         self.scene=QGraphicsScene(self);view=QGraphicsView(self.scene)
@@ -85,8 +86,9 @@ class CadDialog(QDialog):
             ignored_label.setWordWrap(True);layout.addWidget(ignored_label)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Importar eixos, confirmar')
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         buttons.accepted.connect(self.accept);buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.add_footer(buttons)
 
     def mapping(self):return {layer:cb.currentText() for layer,cb in self.selectors.items()}
 
@@ -104,6 +106,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.units = DisplayUnits() if settings is None else DisplayUnits.load(settings)
         self._cursor_xy = None
         self._node_display_values = (0., 0.)
+        self._follow_els_critical = False
         self._load_dialogs = {}
         self.setWindowTitle(APP_TITLE)
         self.resize(1320, 700)
@@ -235,7 +238,6 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.axial_source.addItem('Caso ativo', 'case')
         self.axial_source.addItem('Envoltória geral', 'general')
         self.axial_source.addItem('Envoltória ELU', 'elu')
-        self.axial_source.addItem('Envoltória ELS', 'els')
         self.axial_source.setAccessibleName('Origem dos esforços axiais exibidos')
         self.axial_source.currentIndexChanged.connect(self._axial_source_changed)
         result_header.addWidget(self.axial_source)
@@ -249,6 +251,12 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.deformation_controls = QWidget()
         deformation_layout = QHBoxLayout(self.deformation_controls)
         deformation_layout.setContentsMargins(0, 0, 0, 0)
+        self.deformation_case = QComboBox()
+        self.deformation_case.setAccessibleName('Carregamento da deformada ELS')
+        self.deformation_case.setMaximumWidth(194)
+        self.deformation_case.addItem('Caso ativo', None)
+        self.deformation_case.currentIndexChanged.connect(self._select_deformation_case)
+        deformation_layout.addWidget(self.deformation_case)
         self.auto_deformation = QCheckBox('Escala automática')
         self.auto_deformation.setChecked(True)
         self.deformation_scale = _spin(1, 1, 10_000, 1, 10)
@@ -491,25 +499,20 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.info_tabs.addTab(scroll, title)
 
     def _add_load_dialog(self, page, title, *, height=560):
-        dialog = QDialog(self)
-        dialog.setObjectName('workspaceDialog')
-        dialog.setWindowTitle(title)
-        dialog.resize(465, height)
-        layout = QVBoxLayout(dialog)
-        heading = QLabel(title)
-        heading.setObjectName('dialogHeading')
-        layout.addWidget(heading)
+        dialog = WorkspaceDialog(title, self)
+        dialog.resize(490, height)
         scroll = QScrollArea()
         scroll.setObjectName('loadDialogScroll')
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         page.setObjectName('loadDialogPage')
         scroll.setWidget(page)
-        layout.addWidget(scroll, 1)
+        dialog.body.setContentsMargins(3, 3, 3, 3)
+        dialog.body.addWidget(scroll, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText('Fechar')
         buttons.rejected.connect(dialog.close)
-        layout.addWidget(buttons)
+        dialog.add_footer(buttons)
         self._load_dialogs[page] = dialog
 
     def _open_load_dialog(self, page, selector):
@@ -615,12 +618,40 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.view.show_deformed = deform
         self._overlay_buttons['show_efforts'].setChecked(not deform)
         self._overlay_buttons['show_deformed'].setChecked(deform)
+        if deform:
+            self._populate_deformation_cases()
+            if not self.deformation_case.currentData() and self.deformation_case.count() > 1:
+                self.deformation_case.setCurrentIndex(1)
         self.view.render(self.session, self.case_id, fit=True)
         self.refresh_quick_table()
+
+    def _populate_deformation_cases(self):
+        result = self.session.result or {}
+        ids = result.get('envelope_combinations', {}).get('els', [])
+        with QSignalBlocker(self.deformation_case):
+            self.deformation_case.clear()
+            self.deformation_case.addItem('Caso ativo', None)
+            if ids:
+                critical = governing_els_case(result)
+                self.deformation_case.addItem('ELS · Maior |Uy|', critical)
+                self.deformation_case.setItemData(1, f'Combinação governante: {critical}', Qt.ItemDataRole.ToolTipRole)
+                for cid in ids:
+                    self.deformation_case.addItem(f'ELS · {cid}', cid)
+                if self._follow_els_critical and self.case_id == critical:
+                    self.deformation_case.setCurrentIndex(1)
+                elif self.case_id in ids:
+                    self.deformation_case.setCurrentIndex(ids.index(self.case_id) + 2)
+
+    def _select_deformation_case(self, index):
+        self._follow_els_critical = index == 1
+        case = self.deformation_case.currentData()
+        if case:
+            self.cases.setCurrentText(case)
 
     def _axial_source_changed(self, *_):
         self.view.envelope_scope = self.axial_source.currentData()
         self.view.show_envelope = self.view.envelope_scope != 'case'
+        self.axial_values.setText('Picos e barra selecionada' if self.view.show_envelope else 'Valores no diagrama')
         if self.view.show_efforts:
             self.view.render(self.session, self.case_id)
         self._refresh_property_summary()
@@ -692,6 +723,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if editing_node:
             coordinates = self._node_position()
             supports = self.support_x.isChecked(), self.support_y.isChecked()
+            restraint = self.node_lateral.isChecked(), self.node_lateral_reference.text()
         self.units = self.view.units = units
         if self._settings is not None:
             units.save(self._settings)
@@ -710,6 +742,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self._set_node_position_fields(*coordinates)
             self.support_x.setChecked(supports[0])
             self.support_y.setChecked(supports[1])
+            self.node_lateral.setChecked(restraint[0])
+            self.node_lateral_reference.setText(restraint[1])
         self.refresh_load_table(reset_selection=False)
         self.refresh_result_table()
         if self.result_table.currentRow() >= 0 and self.session.result:
@@ -779,7 +813,18 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._set_node_position_fields(0., 0.)
         self.support_x=QCheckBox('Restringir UX');self.support_y=QCheckBox('Restringir UY')
         f.addRow('Apoio',self.support_x);f.addRow('',self.support_y)
-        self.apply_node=_button('Aplicar posição e apoios', self.apply_node_properties, 'check')
+        self.node_lateral = QCheckBox('Travado fora do plano')
+        self.node_lateral.setToolTip('Declara contenção lateral no nó. Apoios UX e UY são independentes.')
+        self.node_lateral_reference = QLineEdit()
+        self.node_lateral_reference.setPlaceholderText('Detalhe ou referência')
+        self.node_lateral_reference.setEnabled(False)
+        self.node_lateral.toggled.connect(self.node_lateral_reference.setEnabled)
+        self.node_lateral_status = QLabel()
+        self.node_lateral_status.setWordWrap(True)
+        f.addRow(self.node_lateral)
+        f.addRow('Referência', self.node_lateral_reference)
+        f.addRow(self.node_lateral_status)
+        self.apply_node=_button('Aplicar posição, apoios e travamento', self.apply_node_properties, 'check')
         f.addRow('Aplicar ao nó', self.apply_node);col.addWidget(g)
         g2=QGroupBox('Propriedades das barras');ff=QFormLayout(g2)
         self.member_properties = g2
@@ -971,6 +1016,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             previous=self.case_id
             self.cases.blockSignals(True);self.cases.clear();self.cases.addItems(options)
             self.case_id=previous if previous in options else next(iter(options),None)
+            if self.view.show_deformed and self._follow_els_critical and self.session.result:
+                self.case_id = governing_els_case(self.session.result) or self.case_id
             if self.case_id:self.cases.setCurrentText(self.case_id)
             self.cases.blockSignals(False)
             self._populate_load_choices()
@@ -989,6 +1036,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self._set_canvas_selection(self._selected)
             self._update_selection(self.view.selected_ids(), show_properties=False)
             self.view.set_tool(self.view.tool)
+            self._populate_deformation_cases()
             self.refresh_load_table();self.refresh_result_table();self.refresh_engineering_tabs()
             if self.session.result:
                 self.calc_badge.setText('Análise calculada')
@@ -1022,6 +1070,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             if self._load_dialogs[page].isVisible() and selector.findText(text) >= 0:
                 selector.setCurrentText(text)
         self.case_id=text;self.view.render(self.session,self.case_id)
+        if self.result_views.currentIndex() == 1 and self.deformation_case.currentData() != text:
+            self._follow_els_critical = False
+            self._populate_deformation_cases()
         self._refresh_property_summary()
         self.refresh_result_table()
         self._sync_view3d()
@@ -1082,6 +1133,13 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 n=nodes[id];self.node_id.setText(id);self._set_node_position_fields(n.x,n.y)
                 ux,uy=self.session.model.supports.get(id,(False,False))
                 self.support_x.setChecked(ux);self.support_y.setChecked(uy)
+                connected = any(id in (member.i, member.j) for member in self.session.model.members)
+                mark = (self.session.project.get('stability') or {}).get('nodal_restraints', {}).get(id, {})
+                self.node_lateral.setEnabled(connected)
+                self.node_lateral.setChecked(connected and bool(mark))
+                self.node_lateral_reference.setText(mark.get('reference', ''))
+                pending = mark and not mark['confirmed']
+                self.node_lateral_status.setText('Revisar e aplicar após a alteração da geometria.' if pending else '')
                 self.selection_label.setText(f'Nó {id}  |  X={self.units.length_text(n.x)}  '
                                              f'Y={self.units.length_text(n.y)}')
                 if show_properties:self.info_tabs.setCurrentIndex(1)
@@ -1132,6 +1190,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                     axes = ', '.join(axis for axis, active in [('UX', ux), ('UY', uy)] if active)
                     values = [('ID', identifier), ('X', self.units.length_text(node.x)),
                               ('Y', self.units.length_text(node.y)), ('Apoio', axes or 'Livre')]
+                    mark = (self.session.project.get('stability') or {}).get('nodal_restraints', {}).get(identifier)
+                    if mark:
+                        condition = 'Declarado' if mark['confirmed'] else 'Revisar'
+                        values.append(('Fora do plano', f'{condition} · {mark["reference"]}'))
                     delta = analysis.get('nodal_displacements', {}).get(identifier)
                     if delta is not None:
                         values.extend([('Ux', self.units.displacement_text(delta['ux_mm'], signed=True)),
@@ -1204,13 +1266,34 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         nid=self.node_id.text()
         if not nid:return
         try:
-            p=editing.move_nodes(self.session.project,self.session.model,{nid: self._node_position()})
-            if nid not in {n['id'] for n in p.get('cad_drafts',[])}:
+            model = self.session.model
+            project = self.session.project
+            position = self._node_position()
+            supports = self.support_x.isChecked(), self.support_y.isChecked()
+            old = model.node_map().get(nid)
+            current = (old.x, old.y) if old else tuple(value for _, value in self._node_display_values)
+            if position != current:
+                p = editing.move_nodes(project, model, {nid: position})
+            else:
+                p = deepcopy(project)
+            if old and supports != model.supports.get(nid, (False, False)):
+                p = editing.materialize(p, model)
                 d=p['model_override'];d['supports']=[s for s in d['supports'] if s['node']!=nid]
-                if self.support_x.isChecked() or self.support_y.isChecked():
-                    d['supports'].append({'node':nid,'ux':self.support_x.isChecked(),'uy':self.support_y.isChecked()})
+                if any(supports):
+                    d['supports'].append({'node':nid,'ux':supports[0],'uy':supports[1]})
+            if self.node_lateral.isEnabled():
+                stability = p.get('stability') or {}
+                if self.node_lateral.isChecked():
+                    reference = self.node_lateral_reference.text().strip()
+                    if not reference:
+                        raise ValueError('Informe a referência do travamento fora do plano.')
+                    stability.setdefault('nodal_restraints', {})[nid] = {'reference': reference, 'confirmed': True}
+                    p['stability'] = stability
+                else:
+                    stability.get('nodal_restraints', {}).pop(nid, None)
         except Exception as exc:QMessageBox.warning(self,'Propriedades',str(exc));return
-        self._apply(p,f'Propriedades de {nid} atualizadas')
+        if p != self.session.project:
+            self._apply(p,f'Propriedades de {nid} atualizadas')
 
     def _node_position(self):
         return tuple(original if spin.value() == display else spin.value() * self.units.length_scale
@@ -1236,6 +1319,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         geo['panels']=self.panels.value();geo['roof_shape']=self.shape.currentText()
         geo['truss_type']=self.topology.currentText()
         if geo != self.session.project['geometry']:
+            editing.review_nodal_restraints(p)
             self._apply(p,'Geometria paramétrica',fit=True)
 
     def revert_parametric(self):

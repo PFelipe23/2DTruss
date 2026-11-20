@@ -113,10 +113,16 @@ O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do sele
 
 ### Resultados 2D
 
-- **Esforços axiais** alterna entre **Caso ativo**, **Envoltória geral**, **Envoltória ELU** e **Envoltória ELS**. As duas últimas usam apenas as combinações explicitamente classificadas na família correspondente. Na envoltória, cada caixa tem a tração máxima em vermelho na linha superior e a compressão máxima em azul na inferior. Um traço indica a ausência daquele sinal. As caixas usam fonte 6 e os extremos globais de tração e compressão usam fonte 10. Clique na caixa para abrir os dados em fonte 10, com o carregamento governante. Em vistas densas, aproxime para revelar mais caixas.
-- **Deformações** sobrepõe a deformada tracejada à geometria original. Os marcadores âmbar identificam os nós dos picos ascendente e descendente de `Uy` e do maior deslocamento resultante. Se um nó governa mais de um pico, os valores aparecem juntos. Clique no nó original ou deformado para abrir uma caixa com `Ux`, `Uy` e `|u|`. A amplificação automática ou manual afeta a representação gráfica. A tabela e as caixas exibem valores reais.
+- **Esforços axiais** alterna entre **Caso ativo**, **Envoltória geral** e **Envoltória ELU**. A última usa as combinações classificadas como ELU. Na envoltória, o desenho mostra os picos globais e as barras selecionadas em fonte 10. A tabela lista todas as barras. O vermelho na linha superior indica tração e o azul na inferior indica compressão. Clique na caixa para consultar as combinações governantes.
+- **Deformações** sobrepõe a deformada tracejada à geometria original. Selecione uma combinação ELS ou **ELS · Maior |Uy|** para ver a deformada da combinação que produz o maior deslocamento vertical em valor absoluto. Os marcadores âmbar identificam os picos ascendente e descendente de `Uy` e o maior deslocamento resultante. Clique no nó original ou deformado para abrir uma caixa com `Ux`, `Uy` e `|u|`. A amplificação gráfica é independente dos valores reais na tabela e nas caixas.
 
 O seletor de carregamento atualiza o caso ativo e a deformada. Clique numa linha para localizar a barra ou o nó no desenho. Os indicadores das caixas de seleção usam fundo claro mesmo sob o tema escuro do sistema.
+
+### Travamento fora do plano
+
+Selecione um nó conectado, marque **Travado fora do plano** no editor à direita, informe a referência e aplique. O desenho marca o nó em roxo. O travamento é independente das restrições `UX` e `UY`. Dois nós confirmados no mesmo banzo contínuo permitem obter o comprimento lateral ao longo do trecho entre eles. O comprimento explícito por barra ou grupo tem precedência. O comprimento torsional continua sendo um dado separado.
+
+Após editar a geometria, revise as marcas âmbar no editor. O cadastro representa as condições declaradas de contenção e fornece contexto à verificação da barra e ao reaproveitamento de resistências manuais.
 
 ### Resistências manuais
 
@@ -124,7 +130,7 @@ Abra **Mais comandos → Resistências manuais por grupo**. A tabela lista perfi
 
 O limite abrange barras de comprimento igual ou inferior no mesmo escopo, com perfil, material, arranjo e condições cadastradas compatíveis. Na compressão, a ausência de comprimentos de travamento declarados, de eixos ou de referência mantém a barra em escopo individual. Os dados são salvos no JSON para consulta e reaproveitamento, com origem e comprimento-limite. O cadastro é independente das triagens calculadas pelo motor.
 
-[Dossiê de flambagem fora do plano](docs/FLAMBAGEM_FORA_DO_PLANO.md)
+[Dossiê de flambagem fora do plano e fluxo CUFSM com conferência manual no DimPerfil](docs/FLAMBAGEM_FORA_DO_PLANO.md)
 
 ## Perfis, aço e vista 3D
 

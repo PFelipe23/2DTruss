@@ -29,7 +29,7 @@ def _conditions(project, model, member, stability, kind, catalog_profile):
         fixed = (
             'axis_in_plane', 'axis_out_of_plane', 'k_in_plane', 'k_out_of_plane', 'rotation_deg',
             'unbraced_out_of_plane_mm', 'torsion_unbraced_mm', 'out_of_plane_source',
-            'restraint_reference', 'restraint_note',
+            'out_of_plane_interval', 'restraint_reference', 'restraint_note',
         )
         data.update((key, stability[key]) for key in fixed)
         length = stability['length_mm']
@@ -37,7 +37,7 @@ def _conditions(project, model, member, stability, kind, catalog_profile):
         data['in_plane_length'] = ('member_length' if abs(in_plane - length) <= TOLERANCE_MM else in_plane)
         if (not data['unbraced_out_of_plane_mm'] or not data['torsion_unbraced_mm']
                 or data['axis_in_plane'] is None or data['axis_out_of_plane'] is None
-                or data['out_of_plane_source'] != 'declared' or not data['restraint_reference']):
+                or data['out_of_plane_source'] not in ('declared', 'nodal_declared') or not data['restraint_reference']):
             data['individual_member'] = member.id
     return data
 

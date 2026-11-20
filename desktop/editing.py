@@ -30,8 +30,13 @@ def _invalidate_derived(p:dict):
     p.pop("external_resistances",None)
     for br in p.get("stability",{}).get("lateral_bracing",[]):
         br["assumed_effective"]=False
+    review_nodal_restraints(p)
     p.setdefault("cad_editor_notices",[]).append(
         "Edição CAD: revisar travamentos, capacidades externas e comprimento de flambagem")
+
+def review_nodal_restraints(project):
+    for entry in (project.get('stability') or {}).get('nodal_restraints', {}).values():
+        entry['confirmed'] = False
 
 
 def _find(rows, key):
@@ -155,6 +160,8 @@ def delete_elements(project:dict,model,node_ids=(),member_ids=())->dict:
     for c in [*p.get('load_cases', []), *p.get('load_patterns', [])]:
         if c.get('kind')=='nodal':c['loads']=[r for r in c.get('loads',[]) if r['node'] not in remove_nodes]
     stability=p.get('stability',{})
+    for nid in remove_nodes:
+        stability.get('nodal_restraints', {}).pop(nid, None)
     for mid in remove_members:stability.get('members',{}).pop(mid,None)
     for brace in stability.get('lateral_bracing',[]):
         brace['node_ids']=[x for x in brace.get('node_ids',[]) if x not in remove_nodes]

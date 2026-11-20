@@ -42,6 +42,8 @@
 
 A distância entre travamentos em banzo é medida **ao longo da poligonal da barra**, não pela projeção horizontal. Os nós indicados devem formar parte da mesma cadeia sem ramificações; intervalos fora dos extremos travados ficam pendentes.
 
+O campo opcional `nodal_restraints` guarda as marcas do editor de nós por ID. Cada item tem `reference` e `confirmed`. Dois nós confirmados no mesmo banzo formam uma hipótese de comprimento lateral para as barras no intervalo. Marcas pendentes sobrevivem à edição geométrica para revisão. O comprimento explícito e uma declaração efetiva de banzo em `lateral_bracing` têm precedência. O resultado registra as duas extremidades do intervalo e as referências com origem `nodal_declared`.
+
 ## Propriedades das seções
 
 O catálogo atual traz A, Ix e Iy, mas não caracteriza de forma completa o comportamento à flambagem flexo-torcional, empenamento ou instabilidade distorcional. O módulo não emprega aproximações para Ixy ou propriedade transversal de uma seção composta. Para U e UE **simples**, sem rotação, apresenta raios geométricos de referência quando os eixos são informados. Para seções **duplas**, seções **rotacionadas** e **cantoneiras** (Ixy/eixos principais faltantes), os índices relacionados às propriedades indisponíveis permanecem pendentes.

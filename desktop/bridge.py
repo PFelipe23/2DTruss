@@ -8,6 +8,7 @@ from poe_truss.catalog import load_catalog
 from poe_truss.engine import run_project
 from poe_truss.model import make_model
 from poe_truss.loads import load_patterns, merge_forces, resolve_case_loads
+from .editing import review_nodal_restraints
 from .workflow import add_load_case, update_nodal_loads
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -69,6 +70,9 @@ class Session:
             item['x_mm']=float(x_mm);item['y_mm']=float(y_mm)
         else:
             p.setdefault('node_edits',{})[node_id]={'x_mm':float(x_mm),'y_mm':float(y_mm)}
+        original = self.model.node_map().get(node_id)
+        if original is not None and (original.x, original.y) != (float(x_mm), float(y_mm)):
+            review_nodal_restraints(p)
         self.update_project(p)
 
     def set_support(self, node_id: str, ux:bool, uy:bool):

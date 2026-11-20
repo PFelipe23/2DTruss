@@ -2,11 +2,12 @@
 from dataclasses import asdict, dataclass
 
 from PySide6.QtCore import QLocale
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                               QFormLayout, QLabel, QSpinBox, QVBoxLayout)
+from PySide6.QtWidgets import (QComboBox, QDialogButtonBox, QDoubleSpinBox,
+                               QFormLayout, QLabel, QSpinBox)
 
 from poe_truss.units import FORCE_TO_N, LENGTH_TO_MM
 from .ui_theme import WorkspaceCheckBox as QCheckBox
+from .workspace_dialog import WorkspaceDialog
 
 
 FORCE_DIGITS = {'tf': 2, 'kgf': 0, 'kN': 2, 'N': 0}
@@ -107,15 +108,10 @@ class LoadField(QDoubleSpinBox):
         return self._original if value == self._rounded and not self._edited else value
 
 
-class UnitsDialog(QDialog):
+class UnitsDialog(WorkspaceDialog):
     def __init__(self, units, parent):
-        super().__init__(parent)
-        self.setObjectName('workspaceDialog')
-        self.setWindowTitle('Unidades de exibição')
-        layout = QVBoxLayout(self)
-        heading = QLabel('Unidades de exibição')
-        heading.setObjectName('dialogHeading')
-        layout.addWidget(heading)
+        super().__init__('Unidades de exibição', parent)
+        layout = self.body
         form = QFormLayout()
         self.force = QComboBox()
         self.force.addItems(FORCE_DIGITS)
@@ -153,7 +149,7 @@ class UnitsDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.add_footer(buttons)
         for combo in (self.force, self.length, self.stress):
             combo.currentIndexChanged.connect(self._update_sample)
         for spin in (self.force_digits, self.length_digits, self.stress_digits):

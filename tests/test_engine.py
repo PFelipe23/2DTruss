@@ -36,8 +36,9 @@ class AnalyticTests(unittest.TestCase):
         self.assertEqual(result['envelope_combinations'], {'elu': ['U'], 'els': ['S']})
         self.assertEqual(result['envelope']['AB']['tension_case'], 'M')
         self.assertEqual(result['classified_envelopes']['elu']['AB']['tension_case'], 'U')
-        self.assertEqual(result['classified_envelopes']['els']['AB']['compression_case'], 'S')
-        self.assertAlmostEqual(result['classified_envelopes']['els']['AB']['max_compression_n'], -20_000 / 3)
+        self.assertNotIn('els', result['classified_envelopes'])
+        self.assertAlmostEqual(result['analyses']['S']['axial_n']['AB'], -20_000 / 3)
+        self.assertAlmostEqual(result['analyses']['S']['nodal_displacements']['C']['uy_mm'], .2625)
 
     def test_static_case_and_combination_apply_pattern_factors(self):
         from desktop.bridge import Session

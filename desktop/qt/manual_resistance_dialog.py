@@ -1,20 +1,19 @@
 """Cadastro de valores externos por seção, condição e comprimento-limite."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QDoubleSpinBox,
+from PySide6.QtWidgets import (QAbstractItemView, QDialogButtonBox, QDoubleSpinBox,
                                QHeaderView, QLabel, QLineEdit, QMessageBox, QTableWidget,
-                               QTableWidgetItem, QVBoxLayout)
+                               QTableWidgetItem)
 
 from desktop.manual_resistance import KINDS, resistance_rows, update_manual_resistances
 from poe_truss.units import FORCE_TO_N
 from .display_units import LOCALE, LoadField
 from .ui_theme import WorkspaceCheckBox
+from .workspace_dialog import WorkspaceDialog
 
 
-class ManualResistanceDialog(QDialog):
+class ManualResistanceDialog(WorkspaceDialog):
     def __init__(self, session, units, parent):
-        super().__init__(parent)
-        self.setObjectName('workspaceDialog')
-        self.setWindowTitle('Resistências manuais por grupo')
+        super().__init__('Resistências manuais por grupo', parent)
         self.resize(860, 590)
         self.session, self.units = session, units
         self.force_scale = FORCE_TO_N[units.force]
@@ -22,10 +21,7 @@ class ManualResistanceDialog(QDialog):
         self.rows = resistance_rows(session.project, session.model, session.catalog, session.result)
         self.editors = []
 
-        layout = QVBoxLayout(self)
-        title = QLabel('Resistências manuais por grupo')
-        title.setObjectName('dialogHeading')
-        layout.addWidget(title)
+        layout = self.body
         subtitle = QLabel('A solicitação vem da envoltória ELU. O comprimento-limite abrange '
                           'barras mais curtas com as mesmas condições cadastradas.')
         subtitle.setWordWrap(True)
@@ -51,7 +47,7 @@ class ManualResistanceDialog(QDialog):
         layout.addWidget(table, 1)
 
         self.reference = QLineEdit()
-        self.reference.setPlaceholderText('Referência do valor e condições de ligação e travamento')
+        self.reference.setPlaceholderText('Memorial DimPerfil ou referência, ligação e travamento')
         self.reference.setAccessibleName('Referência técnica para os valores alterados')
         layout.addWidget(self.reference)
         self.confirm = WorkspaceCheckBox('Confirmo as condições equivalentes e a aplicação ao comprimento-limite.')
@@ -61,7 +57,7 @@ class ManualResistanceDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('Cancelar')
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.add_footer(buttons)
 
     def _populate(self):
         for index, row in enumerate(self.rows):

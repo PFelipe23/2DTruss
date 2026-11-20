@@ -92,6 +92,34 @@ class AuditingTests(unittest.TestCase):
         self.assertAlmostEqual(r['analyses']['F10']['nodal_displacements']['C']['uy_mm'],-.2625,places=9)
 
 class StabilityDataTests(unittest.TestCase):
+    def test_declared_node_restraints_bound_only_the_chord_interval(self):
+        from desktop.editing import review_nodal_restraints
+
+        project = roof()
+        stability = project.setdefault('stability', {})
+        stability['nodal_restraints'] = {
+            'T02': {'confirmed': True, 'reference': 'Detalhe A'},
+            'T05': {'confirmed': True, 'reference': 'Detalhe B'},
+            'B02': {'confirmed': True, 'reference': 'Detalhe C'},
+        }
+        result = run_project(project, CAT)
+        members = result['stability']['members']
+        inside = [row for row in members.values() if row['out_of_plane_source'] == 'nodal_declared']
+        self.assertEqual(len(inside), 3)
+        span = sum(row['length_mm'] for row in inside)
+        for row in inside:
+            self.assertAlmostEqual(row['unbraced_out_of_plane_mm'], span)
+            self.assertEqual(row['out_of_plane_interval'], ['T02', 'T05'])
+            self.assertEqual(row['restraint_reference'], 'Detalhe A · Detalhe B')
+            self.assertIsNone(row['torsion_unbraced_mm'])
+        self.assertTrue(all(row['unbraced_out_of_plane_mm'] is None
+                            for row in members.values() if row not in inside))
+        review_nodal_restraints(project)
+        pending = run_project(project, CAT)
+        self.assertEqual(pending['analyses'], result['analyses'])
+        self.assertTrue(all(row['unbraced_out_of_plane_mm'] is None
+                            for row in pending['stability']['members'].values()))
+
     def test_no_unverified_bracing_inferred(self):
         r=run_project(BASE,CAT)
         self.assertEqual(r['stability']['summary']['pending'],len(r['model']['members']))

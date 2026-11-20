@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGroupBox,QFormLa
     QComboBox,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
     QHeaderView,QInputDialog,QMessageBox,QLineEdit,QTreeWidget,QTreeWidgetItem,
     QAbstractItemView)
-from desktop import workflow
+from desktop import editing, workflow
 from poe_truss.model import GROUPS,geometry_diagnostics
 from poe_truss.loads import load_patterns, resolve_case_loads
 from poe_truss.materials import STEEL_GRADES
@@ -567,6 +567,8 @@ class WorkflowMixin:
         c=self.search_candidates[i]
         p=deepcopy(self.session.project)
         p['geometry'].update(panels=c['panels'],height_m=c['height_m'])
+        if p['geometry'] != self.session.project['geometry']:
+            editing.review_nodal_restraints(p)
         self._apply(p,'Geometria sugerida adotada')
 
     def _apply_manual(self):

@@ -42,7 +42,7 @@ def _validate_spec(spec:dict,identifier:str):
             raise ValueError(f'Estabilidade {identifier}: {key} deve ser texto')
 
 
-def _lengths_from_bracing(model:Model,bracing:list[dict]) -> tuple[dict[str,float],list[dict]]:
+def _lengths_from_bracing(model:Model,bracing:list[dict]):
     """Intervalo entre nós de contraventamento efetivo, ao longo do banzo.
 
     Aplica-se apenas a grupos com caminho simples sem ramificações. A
@@ -93,24 +93,58 @@ def _lengths_from_bracing(model:Model,bracing:list[dict]) -> tuple[dict[str,floa
             previous,node=node,next_node
         if len(arc)!=len(links):
             raise ValueError(f'Travamento {group}: trecho desconectado')
-        positions=sorted(arc[k] for k in ids)
+        positions=sorted((arc[k], k) for k in ids)
         summary.append({'group':group,'node_ids':ids,'assumed_effective':effective,
                         'reference':evidence,'note':'Eficácia declarada, não verificada' if effective else 'Não utilizado no cálculo'})
         if not effective:continue
         for m in members:
             mid=midpoints[m.id]
-            for left,right in zip(positions,positions[1:]):
+            for (left, start_node), (right, end_node) in zip(positions,positions[1:]):
                 if left-1e-8<=mid<=right+1e-8:
-                    computed[m.id]=right-left
+                    computed[m.id]=(right-left, (start_node, end_node), evidence)
                     break
     return computed,summary
+
+
+def _declared_nodal_intervals(model, restraints, legacy_summary):
+    if not isinstance(restraints, dict):
+        raise ValueError('Estabilidade.nodal_restraints deve ser objeto')
+    connected = {node for member in model.members for node in (member.i, member.j)}
+    confirmed = {}
+    for node, entry in restraints.items():
+        if not isinstance(entry, dict) or type(entry.get('confirmed')) is not bool:
+            raise ValueError(f'Travamento nodal {node}: confirmação inválida')
+        reference = entry.get('reference')
+        if not isinstance(reference, str) or not reference.strip():
+            raise ValueError(f'Travamento nodal {node}: informe uma referência')
+        if entry['confirmed']:
+            if node not in connected:
+                raise ValueError(f'Travamento nodal {node}: nó conectado inexistente')
+            confirmed[node] = reference.strip()
+    assigned = {row['group'] for row in legacy_summary if row['assumed_effective']}
+    intervals, summaries = {}, []
+    for group in ('superior', 'inferior'):
+        nodes = {node for member in model.members if member.group == group for node in (member.i, member.j)}
+        marked = sorted(nodes & confirmed.keys())
+        if len(marked) < 2 or group in assigned:
+            continue
+        entry = {'group': group, 'node_ids': marked, 'assumed_effective': True,
+                 'reference': ' · '.join(dict.fromkeys(confirmed[node] for node in marked))}
+        try:
+            lengths, rows = _lengths_from_bracing(model, [entry])
+        except ValueError as error:
+            summaries.append(dict(entry, assumed_effective=False, note=str(error), source='nodal_declared'))
+        else:
+            intervals.update(lengths)
+            summaries.extend(dict(row, source='nodal_declared') for row in rows)
+    return intervals, summaries
 
 
 def resolve_stability(model:Model,project:dict,catalog:dict) -> dict:
     config=project.get('stability',{})
     if config is None:config={}
     if not isinstance(config,dict):raise ValueError('Campo stability deve ser objeto')
-    extra=set(config)-{'groups','members','lateral_bracing'}
+    extra=set(config)-{'groups','members','lateral_bracing','nodal_restraints'}
     if extra:raise ValueError(f'Estabilidade: campos não reconhecidos {sorted(extra)}')
     group_specs=config.get('groups',{})
     member_specs=config.get('members',{})
@@ -126,6 +160,8 @@ def resolve_stability(model:Model,project:dict,catalog:dict) -> dict:
         _validate_spec(s,f'grupo {key}')
     for key,s in member_specs.items():_validate_spec(s,f'barra {key}')
     auto_braces,bracing_summary=_lengths_from_bracing(model,config.get('lateral_bracing',[]))
+    restraints = config.get('nodal_restraints', {})
+    nodal_braces, nodal_summary = _declared_nodal_intervals(model, restraints, bracing_summary)
     resolved={};counts={'complete_declared':0,'pending':0}
     for m in model.members:
         d={**group_specs.get(m.group,{}),**member_specs.get(m.id,{})}
@@ -133,9 +169,15 @@ def resolve_stability(model:Model,project:dict,catalog:dict) -> dict:
         inplane=_optional_length(d.get('unbraced_in_plane_mm'),f'{m.id}.inplane') or L
         outplane=_optional_length(d.get('unbraced_out_of_plane_mm'),f'{m.id}.outplane')
         src_out='declared' if outplane is not None else None
+        interval = None
+        reference = d.get('restraint_reference', '').strip()
         if outplane is None and m.id in auto_braces:
-            outplane=auto_braces[m.id]
+            outplane, _, _ = auto_braces[m.id]
             src_out='bracing_assumed_effective'
+        if outplane is None and m.id in nodal_braces:
+            outplane, interval, _ = nodal_braces[m.id]
+            src_out = 'nodal_declared'
+            reference = ' · '.join(dict.fromkeys(restraints[node]['reference'] for node in interval))
         torsion=_optional_length(d.get('torsion_unbraced_mm'),f'{m.id}.torsion')
         kin=float(d.get('k_in_plane',1.))
         kout=float(d.get('k_out_of_plane',1.))
@@ -162,7 +204,7 @@ def resolve_stability(model:Model,project:dict,catalog:dict) -> dict:
         if profile and profile.family.startswith('L '):
             pending.append('cantoneira_sem_Ixy_ou_eixos_principais_cadastrados')
         if torsion is None:pending.append('comprimento_torcional_nao_definido')
-        if not d.get('restraint_reference','').strip():pending.append('justificativa_dos_travamentos_pendente')
+        if not reference:pending.append('justificativa_dos_travamentos_pendente')
         state='DADOS_DECLARADOS' if not pending else 'PENDENTE'
         counts['complete_declared' if not pending else 'pending']+=1
         resolved[m.id]={'member_id':m.id,'group':m.group,'profile':m.profile,
@@ -173,11 +215,12 @@ def resolve_stability(model:Model,project:dict,catalog:dict) -> dict:
             'effective_in_plane_mm':kin*inplane,
             'effective_out_of_plane_mm':kout*outplane if outplane else None,
             'out_of_plane_source':src_out,'radii_reference_mm':radii,
+            'out_of_plane_interval':list(interval) if interval else None,
             'lambda_in_plane_reference':lambda_in,'lambda_out_plane_reference':lambda_out,
             'restraint_note':d.get('restraint_note',''),
-            'restraint_reference':d.get('restraint_reference',''),
+            'restraint_reference':reference,
             'state':state,'missing':pending,
             'resistance_verified':False}
     return {'schema':'poe-stability-data/v1','members':resolved,
-            'lateral_bracing':bracing_summary,'summary':counts,
+            'lateral_bracing':bracing_summary + nodal_summary,'summary':counts,
             'disclaimer':'Somente dados e índices geométricos de referência; sem resistência NBR 14762, sem verificação de contraventamentos ou flambagem 3D.'}

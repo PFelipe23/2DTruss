@@ -93,8 +93,7 @@ def run_project(project:dict, catalog:dict) -> dict:
                 if entry.get('combination_class') in classes]
         for scope, classes in COMBINATION_SCOPES.items()
     }
-    envelopes = {scope: axial_envelope(model.members, analyses, ids)
-                 for scope, ids in classified.items()}
+    envelopes = {'elu': axial_envelope(model.members, analyses, classified['elu'])}
     criteria=project.get('geometry',{})
     diagnostics=geometry_diagnostics(model,
         angle_min=float(criteria.get('angle_min_deg',45)),angle_max=float(criteria.get('angle_max_deg',60)),
