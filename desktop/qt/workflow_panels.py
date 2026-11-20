@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt,QSignalBlocker,QTimer
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGroupBox,QFormLayout,QLabel,
     QComboBox,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
     QHeaderView,QInputDialog,QMessageBox,QLineEdit,QTreeWidget,QTreeWidgetItem,
-    QCheckBox,QAbstractItemView)
+    QAbstractItemView)
 from desktop import workflow
 from poe_truss.model import GROUPS,geometry_diagnostics
 from poe_truss.loads import load_patterns, resolve_case_loads

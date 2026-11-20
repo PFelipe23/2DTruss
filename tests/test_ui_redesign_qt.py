@@ -11,6 +11,60 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_envelope_keeps_extremes_and_deformed_nodes_are_clickable(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+        from desktop.qt.result_display import displacement_peaks, envelope_values
+        from desktop.qt.viewport import EnvelopeLabel
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            window.cases.setCurrentText('S_GRAV')
+            window.calculate()
+            window.axial_source.setCurrentIndex(1)
+            app.processEvents()
+            result = window.session.result
+            envelope = result['envelope']
+            self.assertTrue(window.view.show_envelope)
+            labels = [label for label in window.view._axial_labels if isinstance(label, EnvelopeLabel)]
+            self.assertTrue(any(top.startswith('+') and bottom.startswith('-')
+                                for top, bottom in (label.values for label in labels)))
+            table = window.quick_table
+            member = table.item(0, 0).text()
+            expected = envelope_values(envelope[member], window.units, unit=False)
+            self.assertEqual(tuple(table.item(0, i).text() for i in (2, 3)), expected)
+            for col, key in [(2, 'tension_case'), (3, 'compression_case')]:
+                if envelope[member][key]:
+                    self.assertIn(envelope[member][key], table.item(0, col).toolTip())
+            window.cases.setCurrentText('W_UP')
+            self.assertEqual(table.item(0, 0).text(), member)
+
+            window.result_views.setCurrentIndex(1)
+            app.processEvents()
+            data = result['analyses']['W_UP']['nodal_displacements']
+            peaks = displacement_peaks(data)
+            self.assertTrue(peaks)
+            self.assertEqual(set(window.view._peak_labels), set(peaks))
+            node = next(iter(peaks))
+            marker = window.view._deformed_nodes[node]
+            self.assertTrue(marker.peak)
+            for point in (marker.pos(), window.view.selection_item('node', node).pos()):
+                window._set_canvas_selection([])
+                QTest.mouseClick(window.view.viewport(), Qt.MouseButton.LeftButton,
+                                 pos=window.view.mapFromScene(point))
+                self.assertEqual(window.view.selected_ids(), [('node', node)])
+                callout = window.view._displacement_callout
+                self.assertIsNotNone(callout)
+                self.assertTrue(callout.isVisible())
+                self.assertIn(window.units.displacement_text(data[node]['uy_mm'], signed=True), callout.text())
+        finally:
+            window.close()
+
     def test_result_views_select_diagrams_and_keep_displacements_unscaled(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from math import hypot

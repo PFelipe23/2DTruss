@@ -2,10 +2,11 @@
 from dataclasses import asdict, dataclass
 
 from PySide6.QtCore import QLocale
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
                                QFormLayout, QLabel, QSpinBox, QVBoxLayout)
 
 from poe_truss.units import FORCE_TO_N, LENGTH_TO_MM
+from .ui_theme import WorkspaceCheckBox as QCheckBox
 
 
 FORCE_DIGITS = {'tf': 2, 'kgf': 0, 'kN': 2, 'N': 0}

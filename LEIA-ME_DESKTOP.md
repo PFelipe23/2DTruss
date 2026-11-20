@@ -113,10 +113,10 @@ O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do sele
 
 ### Resultados 2D
 
-- **Esforços axiais** colore a tração em vermelho, a compressão em azul e os valores nulos em cinza. A tabela ordena as barras pela magnitude de `N`. Use **Valores no diagrama** para alternar os rótulos e **Detalhar esforços e envoltórias** para consultar filtros e extremos por barra.
-- **Deformações** sobrepõe a deformada tracejada à geometria original. O painel indica o nó com maior magnitude de `Uy` e lista `Ux`, `Uy` e a magnitude do deslocamento por nó. A amplificação automática ou manual afeta a representação gráfica. Os valores da tabela são deslocamentos reais.
+- **Esforços axiais** alterna entre **Caso ativo** e **Envoltória**. Na envoltória, cada caixa tem a tração máxima em vermelho na linha superior e a compressão máxima em azul na inferior. Um traço indica a ausência daquele sinal. Passe o cursor sobre o valor na tabela ou selecione a barra para conferir o caso ou a combinação governante. A envoltória usa as combinações cadastradas ou os casos quando não há combinações.
+- **Deformações** sobrepõe a deformada tracejada à geometria original. Os marcadores âmbar identificam os nós dos picos ascendente e descendente de `Uy` e do maior deslocamento resultante. Se um nó governa mais de um pico, os valores aparecem juntos. Clique no nó original ou deformado para abrir uma caixa com `Ux`, `Uy` e `|u|`. A amplificação automática ou manual afeta a representação gráfica. A tabela e as caixas exibem valores reais.
 
-O seletor de carregamento atualiza o diagrama e a tabela. Clique numa linha para localizar a barra ou o nó no desenho.
+O seletor de carregamento atualiza o caso ativo e a deformada. Clique numa linha para localizar a barra ou o nó no desenho. Os indicadores das caixas de seleção usam fundo claro mesmo sob o tema escuro do sistema.
 
 ## Perfis, aço e vista 3D
 

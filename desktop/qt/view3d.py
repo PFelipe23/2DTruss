@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor,QBrush,QPen,QPolygonF,QPainter,QFont
 from PySide6.QtWidgets import (
     QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QGraphicsScene,QGraphicsView,
     QGraphicsPolygonItem,QGraphicsEllipseItem,QGraphicsItem,QComboBox,
-    QColorDialog,QSlider,QCheckBox,QFormLayout,QWidget,QToolButton,QMenu,
+    QColorDialog,QSlider,QFormLayout,QWidget,QToolButton,QMenu,
     QTabWidget,QDoubleSpinBox,QGroupBox,QMessageBox,QFileDialog,
 )
 from desktop.preview3d import Camera, camera_projection, color_key,palette_keys
@@ -25,6 +25,7 @@ from desktop.bridge import CATALOG
 from poe_truss.model import GROUPS
 from .action_icons import IconButton
 from .display_units import DisplayUnits
+from .ui_theme import WorkspaceCheckBox as QCheckBox
 from .profile_picker import ProfilePicker
 
 DEFAULT={

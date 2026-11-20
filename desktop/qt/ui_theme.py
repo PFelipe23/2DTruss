@@ -1,5 +1,47 @@
 """Identidade de interface 2DTruss v0.1 — desktop engineering workspace."""
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
+from PySide6.QtWidgets import QCheckBox, QStyle, QStyleOptionButton, QStyleOptionFocusRect
+
+
+class WorkspaceCheckBox(QCheckBox):
+    """Mantém o indicador legível com qualquer tema do sistema."""
+
+    def paintEvent(self, event):
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        style = self.style()
+        indicator = style.subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, self)
+        enabled = self.isEnabled()
+        checked = self.checkState() != Qt.CheckState.Unchecked
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            edge = '#26729B' if enabled and (checked or self.underMouse()) else '#6A8295' if enabled else '#A8B6C1'
+            painter.setBrush(QColor('#FFFFFF' if enabled else '#F1F5F7'))
+            painter.setPen(QPen(QColor(edge), 1))
+            painter.drawRoundedRect(QRectF(indicator).adjusted(.5, .5, -.5, -.5), 2, 2)
+            if checked:
+                x, y = indicator.x(), indicator.y()
+                w, h = indicator.width(), indicator.height()
+                mark = QPainterPath()
+                if self.checkState() == Qt.CheckState.PartiallyChecked:
+                    mark.moveTo(x + w * .24, y + h * .5)
+                    mark.lineTo(x + w * .76, y + h * .5)
+                else:
+                    mark.moveTo(x + w * .22, y + h * .51)
+                    mark.lineTo(x + w * .43, y + h * .72)
+                    mark.lineTo(x + w * .78, y + h * .29)
+                painter.setPen(QPen(QColor('#095581' if enabled else '#657F90'), 1.8,
+                                    Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                painter.drawPath(mark)
+            label = QStyleOptionButton(option)
+            label.rect = style.subElementRect(QStyle.SubElement.SE_CheckBoxContents, option, self)
+            style.drawControl(QStyle.ControlElement.CE_CheckBoxLabel, label, painter, self)
+            if self.hasFocus():
+                focus = QStyleOptionFocusRect()
+                focus.initFrom(self)
+                focus.rect = style.subElementRect(QStyle.SubElement.SE_CheckBoxFocusRect, option, self)
+                style.drawPrimitive(QStyle.PrimitiveElement.PE_FrameFocusRect, focus, painter, self)
 
 
 def workspace_palette():
