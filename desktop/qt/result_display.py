@@ -5,17 +5,24 @@ EXTREMES = (('max_tension_n', 'tension_case', 'Tração'),
             ('max_compression_n', 'compression_case', 'Compressão'))
 
 
+def selected_envelope(result, scope):
+    if scope == 'general':
+        return result.get('envelope', {})
+    return result.get('classified_envelopes', {}).get(scope, {})
+
+
 def envelope_rank(extremes):
     return max(extremes['max_tension_n'], abs(extremes['max_compression_n']))
 
 
 def envelope_values(extremes, units, *, unit=True):
-    return tuple(units.force_text(extremes[key], signed=True, unit=unit) if extremes[case] else '—'
+    return tuple(units.force_text(extremes[key], signed=True, unit=unit)
+                 if extremes[case] and abs(extremes[key]) >= .0001 else '—'
                  for key, case, _ in EXTREMES)
 
 
 def envelope_details(extremes, units):
-    return [(title, f'{value} · {extremes[case]}' if extremes[case] else value)
+    return [(title, f'{value} · {extremes[case]}' if value != '—' else value)
             for (_, case, title), value in zip(EXTREMES, envelope_values(extremes, units))]
 
 

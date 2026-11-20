@@ -10,6 +10,27 @@ from .camber import suggested_camber
 from .solver import LinearTruss
 from .version import VERSION
 
+COMBINATION_SCOPES = {
+    'elu': ('uls_normal', 'uls_special', 'uls_exceptional'),
+    'els': ('sls_rare', 'sls_frequent', 'sls_quasi'),
+}
+
+
+def axial_envelope(members, analyses, candidates):
+    if not candidates:
+        return {}
+    envelope = {}
+    for member in members:
+        values = [(analyses[case]['axial_n'][member.id], case) for case in candidates]
+        tension, tension_case = max(values, key=lambda entry: entry[0])
+        compression, compression_case = min(values, key=lambda entry: entry[0])
+        envelope[member.id] = {
+            'max_tension_n': max(0., tension), 'max_compression_n': min(0., compression),
+            'tension_case': tension_case if tension > 0 else None,
+            'compression_case': compression_case if compression < 0 else None,
+        }
+    return envelope
+
 
 def run_project(project:dict, catalog:dict) -> dict:
     if project.get('schema') not in ('poe-truss-python/v1',None):
@@ -66,17 +87,14 @@ def run_project(project:dict, catalog:dict) -> dict:
         analyses[cid]=solver.analyze(merge_forces(factors,raw))
         load_audit[cid]=combination_audit(cid,factors,raw)
     candidates=list(combinations.keys()) if combinations else list(raw.keys())
-    envelope={}
-    for m in model.members:
-        values=[(analyses[cid]['axial_n'][m.id],cid) for cid in candidates]
-        tensile=max(values,key=lambda v:v[0])
-        compressed=min(values,key=lambda v:v[0])
-        envelope[m.id]={
-            'max_tension_n':max(0.,tensile[0]),
-            'max_compression_n':min(0.,compressed[0]),
-            'tension_case':tensile[1] if tensile[0]>0 else None,
-            'compression_case':compressed[1] if compressed[0]<0 else None,
-        }
+    envelope = axial_envelope(model.members, analyses, candidates)
+    classified = {
+        scope: [entry['id'] for entry in combination_meta
+                if entry.get('combination_class') in classes]
+        for scope, classes in COMBINATION_SCOPES.items()
+    }
+    envelopes = {scope: axial_envelope(model.members, analyses, ids)
+                 for scope, ids in classified.items()}
     criteria=project.get('geometry',{})
     diagnostics=geometry_diagnostics(model,
         angle_min=float(criteria.get('angle_min_deg',45)),angle_max=float(criteria.get('angle_max_deg',60)),
@@ -107,7 +125,8 @@ def run_project(project:dict, catalog:dict) -> dict:
         notices.append('Sistema potencialmente mal condicionado: verificar deformações e geometria.')
     return {'schema':'poe-truss-result/v1','engine':'Python stdlib','model':model.to_dict(),
             'load_cases':case_meta,'combinations':combination_meta,
-            'analyses':analyses,'envelope':envelope,'geometry_diagnostics':diagnostics,
+            'analyses':analyses,'envelope':envelope,'classified_envelopes':envelopes,
+            'envelope_combinations':classified,'geometry_diagnostics':diagnostics,
             'warnings':notices,'load_audit':load_audit,'stability':stability,
             'section_properties':section_data,'axial_screen':axial_data,'camber':camber,
             'software_version':VERSION,'envelope_source':'combinations' if combinations else 'individual_load_cases'}

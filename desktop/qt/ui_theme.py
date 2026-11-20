@@ -124,6 +124,7 @@ QFrame#viewportBar {background:#EDF3F8;border-top:1px solid #D9E4ED;border-botto
 QLabel#viewMode {color:#17658C;font-weight:700;}
 QFrame#forceBar {background:#FFF8ED;border-bottom:1px solid #E9D8BD;}
 QFrame#forceBar QLabel {color:#784517;}
+QFrame#envelopeDetails {background:#FFFFFF;border:1px solid #AABCCB;border-radius:4px;}
 QLabel#calcPending {color:#78521A;background:#FFF0D5;border-radius:4px;padding:3px 8px;}
 QLabel#calcReady {color:#146147;background:#DCF2E8;border-radius:4px;padding:3px 8px;}
 '''

@@ -27,7 +27,8 @@ from poe_truss.units import FORCE_TO_N
 from poe_truss.version import APP_NAME, TAG
 from .action_icons import action_icon, IconButton as _button
 from .display_units import DisplayUnits, LOCALE, LoadField, UnitsDialog, format_number
-from .result_display import displacement_resultant, envelope_details, envelope_rank, envelope_values
+from .manual_resistance_dialog import ManualResistanceDialog
+from .result_display import displacement_resultant, envelope_details, envelope_rank, envelope_values, selected_envelope
 from .viewport import COMP, DEFORMED, DISPLACEMENT_PEAK, TENS, TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
@@ -231,8 +232,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         result_header.addWidget(self.result_views)
         result_header.addStretch()
         self.axial_source = QComboBox()
-        self.axial_source.addItem('Caso ativo', False)
-        self.axial_source.addItem('Envoltória', True)
+        self.axial_source.addItem('Caso ativo', 'case')
+        self.axial_source.addItem('Envoltória geral', 'general')
+        self.axial_source.addItem('Envoltória ELU', 'elu')
+        self.axial_source.addItem('Envoltória ELS', 'els')
         self.axial_source.setAccessibleName('Origem dos esforços axiais exibidos')
         self.axial_source.currentIndexChanged.connect(self._axial_source_changed)
         result_header.addWidget(self.axial_source)
@@ -395,6 +398,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             ('Apoios e seleção', lambda: self._open_inspector_index(1), 'support'),
             ('Alternativas', lambda: self._show_inspector(self.search_tab), 'compare'),
             ('Diagnóstico', lambda: self._show_inspector(self.diagnostics_tab), 'diagnostic'),
+            ('Resistências manuais por grupo', self.open_manual_resistances, 'report'),
             ('Exportar DimPerfil CSV', self.export_csv, 'export'),
             ('Exportar memorial A3', self.export_memorial, 'report'),
             ('Escala vertical', self.change_vertical, 'vertical'),
@@ -615,7 +619,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.refresh_quick_table()
 
     def _axial_source_changed(self, *_):
-        self.view.show_envelope = bool(self.axial_source.currentData())
+        self.view.envelope_scope = self.axial_source.currentData()
+        self.view.show_envelope = self.view.envelope_scope != 'case'
         if self.view.show_efforts:
             self.view.render(self.session, self.case_id)
         self._refresh_property_summary()
@@ -661,6 +666,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._position_dialog(dialog)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.set_units(dialog.units())
+
+    def open_manual_resistances(self):
+        try:
+            dialog = ManualResistanceDialog(self.session, self.units, self)
+        except (TypeError, ValueError, KeyError) as error:
+            QMessageBox.warning(self, 'Resistências manuais', str(error))
+            return
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._apply(dialog.updated_project, 'Resistências manuais registradas')
 
     def _position_dialog(self, dialog):
         size = dialog.size().expandedTo(dialog.sizeHint())
@@ -1137,7 +1151,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                               ('Grupo', member.group), ('Perfil', member.profile),
                               ('Comprimento', self.units.length_text(model.member_length(member)))]
                     force = analysis.get('axial_n', {}).get(identifier)
-                    envelope = (self.session.result or {}).get('envelope', {}).get(identifier)
+                    envelope = selected_envelope(self.session.result or {}, self.view.envelope_scope).get(identifier)
                     if self.view.show_efforts and self.view.show_envelope and envelope and not self.mode_3d.isChecked():
                         values.extend(envelope_details(envelope, self.units))
                     elif force is not None:
@@ -1687,7 +1701,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         is_envelope = not deform and self.view.show_envelope
         result = self.session.result or {}
         analysis = result.get('analyses', {}).get(self.case_id)
-        envelope = result.get('envelope', {}) if is_envelope else {}
+        scope = self.view.envelope_scope
+        envelope = selected_envelope(result, scope) if is_envelope else {}
         with QSignalBlocker(self.quick_table):
             if deform:
                 unit = self.units.length
@@ -1711,15 +1726,18 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 self.quick_table.horizontalHeaderItem(column).setTextAlignment(alignment | Qt.AlignmentFlag.AlignVCenter)
             if not (envelope if is_envelope else analysis):
                 self.quick_table.setRowCount(0)
-                self.dock_info.setText('Calcule o modelo para obter a envoltória.' if is_envelope else
-                                       'Calcule o modelo ou selecione um caso com resultados.')
+                if result and scope in ('elu', 'els') and is_envelope:
+                    message = f'Classifique combinações como {scope.upper()} e recalcule.'
+                else:
+                    message = 'Calcule o modelo ou selecione um carregamento com resultados.'
+                self.dock_info.setText(message)
                 self.result_legend.clear()
                 return
 
             if deform:
                 records = self._displacement_rows(analysis['nodal_displacements'])
             elif is_envelope:
-                records = self._envelope_rows(envelope, result.get('envelope_source'))
+                records = self._envelope_rows(envelope, result, scope)
             else:
                 axial = analysis['axial_n']
                 members = sorted(self.session.model.members, key=lambda m: abs(axial[m.id]), reverse=True)
@@ -1741,7 +1759,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                         cell.setForeground(QColor((TENS, COMP)[column - 2] if value != '—' else '#657989'))
                         entry = envelope[values[0]]
                         case = entry['tension_case' if column == 2 else 'compression_case']
-                        if case:
+                        if case and value != '—':
                             cell.setToolTip(f'Carregamento governante: {case}')
                     elif (deform and column > 0) or (not deform and column == 2):
                         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -1750,10 +1768,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                     self.quick_table.setItem(row, column, cell)
             self._sync_quick_selection()
 
-    def _envelope_rows(self, envelope, source):
+    def _envelope_rows(self, envelope, result, scope):
         members = sorted(self.session.model.members, key=lambda member: envelope_rank(envelope[member.id]),
                          reverse=True)
-        origin = 'das combinações' if source == 'combinations' else 'dos casos'
+        if scope == 'general':
+            origin = 'das combinações' if result.get('envelope_source') == 'combinations' else 'dos casos'
+        else:
+            count = len(result['envelope_combinations'][scope])
+            combination_label = 'combinação' if count == 1 else 'combinações'
+            origin = f'{scope.upper()} · {count} {combination_label}'
         self.dock_info.setText(f'Envoltória {origin} · {len(members)} barras')
         self.result_legend.setText(
             f'<span style="color:{TENS}">↑ Linha superior: tração</span> &nbsp;'

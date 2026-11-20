@@ -25,6 +25,20 @@ ROOF=json.loads((ROOT/'examples/cobertura_duas_aguas.json').read_text())
 
 
 class AnalyticTests(unittest.TestCase):
+    def test_classified_envelopes_keep_manual_combinations_out(self):
+        project = copy.deepcopy(TRIANGLE)
+        project['combinations'] = [
+            {'id': 'U', 'combination_class': 'uls_normal', 'factors': {'F10': 2}},
+            {'id': 'S', 'combination_class': 'sls_rare', 'factors': {'F10': -1}},
+            {'id': 'M', 'factors': {'F10': 10}},
+        ]
+        result = run_project(project, CATALOG)
+        self.assertEqual(result['envelope_combinations'], {'elu': ['U'], 'els': ['S']})
+        self.assertEqual(result['envelope']['AB']['tension_case'], 'M')
+        self.assertEqual(result['classified_envelopes']['elu']['AB']['tension_case'], 'U')
+        self.assertEqual(result['classified_envelopes']['els']['AB']['compression_case'], 'S')
+        self.assertAlmostEqual(result['classified_envelopes']['els']['AB']['max_compression_n'], -20_000 / 3)
+
     def test_static_case_and_combination_apply_pattern_factors(self):
         from desktop.bridge import Session
         from desktop.workflow import add_combination, update_combination, update_static_case

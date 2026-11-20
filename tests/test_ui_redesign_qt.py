@@ -32,6 +32,14 @@ class QtRedesignSmoke(unittest.TestCase):
             envelope = result['envelope']
             self.assertTrue(window.view.show_envelope)
             labels = [label for label in window.view._axial_labels if isinstance(label, EnvelopeLabel)]
+            self.assertEqual(len(labels), len(window.session.model.members))
+            self.assertEqual({label.font().pointSize() for label in labels}, {6, 10})
+            visible = next(label for label in labels if label.isVisible())
+            position = visible.deviceTransform(window.view.viewportTransform()).map(visible.boundingRect().center())
+            with patch.object(EnvelopeLabel, 'popup', autospec=True) as popup:
+                QTest.mouseClick(window.view.viewport(), Qt.MouseButton.LeftButton, pos=position.toPoint())
+                self.assertEqual(window.view.selected_ids(), [('member', visible.member_id)])
+                popup.assert_called_once()
             self.assertTrue(any(top.startswith('+') and bottom.startswith('-')
                                 for top, bottom in (label.values for label in labels)))
             table = window.quick_table

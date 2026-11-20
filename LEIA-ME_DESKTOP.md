@@ -113,10 +113,18 @@ O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do sele
 
 ### Resultados 2D
 
-- **Esforços axiais** alterna entre **Caso ativo** e **Envoltória**. Na envoltória, cada caixa tem a tração máxima em vermelho na linha superior e a compressão máxima em azul na inferior. Um traço indica a ausência daquele sinal. Passe o cursor sobre o valor na tabela ou selecione a barra para conferir o caso ou a combinação governante. A envoltória usa as combinações cadastradas ou os casos quando não há combinações.
+- **Esforços axiais** alterna entre **Caso ativo**, **Envoltória geral**, **Envoltória ELU** e **Envoltória ELS**. As duas últimas usam apenas as combinações explicitamente classificadas na família correspondente. Na envoltória, cada caixa tem a tração máxima em vermelho na linha superior e a compressão máxima em azul na inferior. Um traço indica a ausência daquele sinal. As caixas usam fonte 6 e os extremos globais de tração e compressão usam fonte 10. Clique na caixa para abrir os dados em fonte 10, com o carregamento governante. Em vistas densas, aproxime para revelar mais caixas.
 - **Deformações** sobrepõe a deformada tracejada à geometria original. Os marcadores âmbar identificam os nós dos picos ascendente e descendente de `Uy` e do maior deslocamento resultante. Se um nó governa mais de um pico, os valores aparecem juntos. Clique no nó original ou deformado para abrir uma caixa com `Ux`, `Uy` e `|u|`. A amplificação automática ou manual afeta a representação gráfica. A tabela e as caixas exibem valores reais.
 
 O seletor de carregamento atualiza o caso ativo e a deformada. Clique numa linha para localizar a barra ou o nó no desenho. Os indicadores das caixas de seleção usam fundo claro mesmo sob o tema escuro do sistema.
+
+### Resistências manuais
+
+Abra **Mais comandos → Resistências manuais por grupo**. A tabela lista perfil, solicitação governante ELU, comprimento-limite e resistência fornecida pelo projetista. Os limites de tração e compressão são cadastrados separadamente. Informe a referência técnica junto com as condições de ligação e travamento e confirme a equivalência das barras agrupadas.
+
+O limite abrange barras de comprimento igual ou inferior no mesmo escopo, com perfil, material, arranjo e condições cadastradas compatíveis. Na compressão, a ausência de comprimentos de travamento declarados, de eixos ou de referência mantém a barra em escopo individual. Os dados são salvos no JSON para consulta e reaproveitamento, com origem e comprimento-limite. O cadastro é independente das triagens calculadas pelo motor.
+
+[Dossiê de flambagem fora do plano](docs/FLAMBAGEM_FORA_DO_PLANO.md)
 
 ## Perfis, aço e vista 3D
 
