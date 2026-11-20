@@ -9,7 +9,7 @@ from math import fsum, hypot
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import Qt,QSignalBlocker,QTimer
+from PySide6.QtCore import QPoint,QSettings,Qt,QSignalBlocker,QTimer
 from PySide6.QtGui import QAction,QKeySequence,QColor,QPen
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,
     QLabel,QToolButton,QComboBox,QDoubleSpinBox,QSpinBox,QCheckBox,QSplitter,
@@ -22,8 +22,10 @@ from desktop.bridge import Session,load_project,write_project
 from desktop import editing,cad_io,workflow
 from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html,ftool_comparison_full_rows
 from poe_truss.loads import load_patterns
+from poe_truss.units import FORCE_TO_N
 from poe_truss.version import APP_NAME, TAG
 from .action_icons import action_icon, IconButton as _button
+from .display_units import DisplayUnits, LOCALE, UnitsDialog
 from .viewport import TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
@@ -87,7 +89,7 @@ class CadDialog(QDialog):
 
 
 class DesktopApp(WorkflowMixin,QMainWindow):
-    def __init__(self,session:Session|None=None):
+    def __init__(self,session:Session|None=None, *, settings=None):
         super().__init__()
         self.session=session or Session()
         self.filepath:Path|None=None
@@ -95,6 +97,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._refreshing=False;self._dirty=False
         self._selected=[];self.case_id=None
         self._view3d=None
+        self._settings = settings
+        self.units = DisplayUnits() if settings is None else DisplayUnits.load(settings)
+        self._cursor_xy = None
+        self._node_display_values = (0., 0.)
+        self._load_dialogs = {}
         self.setWindowTitle(APP_TITLE)
         self.resize(1320, 700)
         self.setMinimumSize(1000, 560)
@@ -162,6 +169,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
         self.view = TrussView()
+        self.view.units = self.units
         bar = QFrame()
         bar.setObjectName('viewportBar')
         strip = QHBoxLayout(bar)
@@ -174,11 +182,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         strip.addWidget(self.view_mode_label)
         strip.addStretch()
         self.cases = QComboBox()
-        self.cases.setAccessibleName('Caso ou combinação exibida')
+        self.cases.setAccessibleName('Tipo, caso ou combinação exibida')
         self.cases.setMinimumContentsLength(8)
         self.cases.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.cases.currentTextChanged.connect(self.on_case)
-        strip.addWidget(QLabel('Caso'))
+        strip.addWidget(QLabel('Carregamento'))
         strip.addWidget(self.cases)
         self.forces_button = _button('Cargas', lambda visible: self._set_overlay('show_forces', visible),
                                      'load_view', checkable=True, light=True)
@@ -195,7 +203,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.force_summary.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         force_layout.addWidget(self.force_summary, 1)
         self.force_values = _button('Valores', self.view.set_load_values, 'ids', checkable=True)
-        self.force_values.setToolTip('Exibir a magnitude das resultantes nodais em kN')
+        self.force_values.setToolTip('Exibir a magnitude das resultantes nodais')
         force_layout.addWidget(self.force_values)
         self.force_bar.hide()
         self.view.forces_displayed.connect(self._show_force_summary)
@@ -216,16 +224,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         result_header.addWidget(self.dock_info, 1)
         result_header.addWidget(_button('Detalhar', lambda: self._open_inspector_index(3), 'report'))
         result_layout.addLayout(result_header)
-        self.quick_table = QTableWidget(0, 4)
-        self.quick_table.setHorizontalHeaderLabels(['Barra', 'Grupo', 'N (kN)', 'Seção'])
+        self.quick_table = QTableWidget(0, 5)
+        self.quick_table.setHorizontalHeaderLabels(self._result_headers('Seção'))
         self.quick_table.setAlternatingRowColors(True)
         self.quick_table.verticalHeader().hide()
         self.quick_table.verticalHeader().setDefaultSectionSize(24)
         self.quick_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.quick_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        for column in range(3):
+        for column in range(4):
             self.quick_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        self.quick_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.quick_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.quick_table.cellClicked.connect(self.quick_select_member)
         result_layout.addWidget(self.quick_table, 1)
         self.center_split.addWidget(self.results_panel)
@@ -276,13 +284,13 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.status_label = QLabel()
         self.status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         status.addWidget(self.status_label, 1)
-        self.coordinates = QLabel('X —    Y —    mm')
+        self.coordinates = QLabel(f'X —    Y —    {self.units.length}')
         self.coordinates.setObjectName('coordinates')
         self.coordinates.setMinimumWidth(226)
         self.view.coordinates_changed.connect(self._show_coordinates)
         self.view.status_text.connect(self.status)
         status.addWidget(self.coordinates)
-        self.snap = _button('Snap 50 mm', self._set_snap, 'snap', checkable=True)
+        self.snap = _button(f'Snap {self.units.length_text(self.view.grid_mm)}', self._set_snap, 'snap', checkable=True)
         self.snap.setChecked(self.view.snap_enabled)
         self.grid = _button('Grade', self.view.set_grid_visible, 'grid', checkable=True)
         self.grid.setChecked(self.view.grid_visible)
@@ -297,7 +305,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.toolbar.setObjectName('quickAccess')
         line = QHBoxLayout(self.toolbar)
         line.setContentsMargins(8, 5, 8, 5)
-        line.setSpacing(3)
+        line.setSpacing(2)
         brand = QLabel(APP_TITLE)
         brand.setObjectName('appHeader')
         line.addWidget(brand)
@@ -307,9 +315,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             (('Selecionar', 'select', 'select'), ('Mover nós', 'move', 'move'), ('Deslocar vista', 'pan', 'pan'),
              ('Enquadrar', self.fit, 'fit'), ('Criar nó', 'node', 'node'), ('Criar barra', 'bar', 'member'),
              ('Subdividir barra', 'split', 'split'), ('Excluir seleção', self.delete_selected, 'delete')),
-            (('Padrões de carga', self.open_general_actions, 'actions'),
-             ('Casos de carga', lambda: self._show_inspector(self.static_tab), 'case'),
-             ('Combinações de carga', lambda: self._show_inspector(self.combo_tab), 'combine'),
+            (('Tipos de Carregamentos', self.open_general_actions, 'actions'),
+             ('Casos de Carregamentos', self.open_static_cases, 'case'),
+             ('Combinações', self.open_combinations, 'combine'),
              ('Inserir cargas nodais', self.open_nodal_loads, 'load'),
              ('Perfis e aço', self._open_profiles, 'profile')),
         )
@@ -321,7 +329,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             divider.setFixedSize(1, 19)
             line.addWidget(divider)
 
-        for label, flag, icon in [('IDs dos nós', 'show_ids', 'ids'), ('Esforços', 'show_efforts', 'force'),
+        for label, flag, icon in [('Identificadores dos nós', 'show_ids', 'node_ids'),
+                                  ('Identificadores das barras', 'show_member_ids', 'bar_ids'),
+                                  ('Esforços', 'show_efforts', 'force'),
                                   ('Deformada', 'show_deformed', 'deformed')]:
             line.addWidget(self._workspace_button(label, flag, icon, light=True))
         self._overlay_buttons['show_forces'] = self.forces_button
@@ -349,10 +359,28 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         line.addWidget(more)
         line.addStretch(1)
+        self.unit_button = _button('Unidades de exibição', self.open_units, 'units', light=True)
+        line.addWidget(self.unit_button)
+        self.unit_summary = QLabel()
+        self.unit_summary.setObjectName('unitSummary')
+        self._update_unit_summary()
+        line.addWidget(self.unit_summary)
         run = _button('Calcular (F5)', self.calculate, 'run', light=True)
         run.setObjectName('calculateButton')
         line.addWidget(run)
         main.insertWidget(0, self.toolbar)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'unit_summary'):
+            self._fit_toolbar(event.size().width())
+
+    def _fit_toolbar(self, width):
+        layout = self.toolbar.layout()
+        required = layout.minimumSize().width()
+        if self.unit_summary.isHidden():
+            required += self.unit_summary.sizeHint().width() + layout.spacing()
+        self.unit_summary.setVisible(width >= required)
 
     def _workspace_button(self, label, command, icon, *, light=False):
         if not isinstance(command, str):
@@ -378,6 +406,42 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._inspector_pages[page] = scroll
         self.info_tabs.addTab(scroll, title)
 
+    def _add_load_dialog(self, page, title, *, height=560):
+        dialog = QDialog(self)
+        dialog.setObjectName('workspaceDialog')
+        dialog.setWindowTitle(title)
+        dialog.resize(465, height)
+        layout = QVBoxLayout(dialog)
+        heading = QLabel(title)
+        heading.setObjectName('dialogHeading')
+        layout.addWidget(heading)
+        scroll = QScrollArea()
+        scroll.setObjectName('loadDialogScroll')
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        page.setObjectName('loadDialogPage')
+        scroll.setWidget(page)
+        layout.addWidget(scroll, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.button(QDialogButtonBox.StandardButton.Close).setText('Fechar')
+        buttons.rejected.connect(dialog.close)
+        layout.addWidget(buttons)
+        self._load_dialogs[page] = dialog
+
+    def _open_load_dialog(self, page, selector):
+        dialog = self._load_dialogs[page]
+        for other in self._load_dialogs.values():
+            if other is not dialog:
+                other.hide()
+        if not dialog.isVisible() and selector.findText(self.case_id or '') >= 0:
+            selector.setCurrentText(self.case_id)
+        self._show_load_case(selector.currentText())
+        if not dialog.testAttribute(Qt.WidgetAttribute.WA_Moved):
+            self._position_dialog(dialog)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _show_inspector(self, page):
         self._open_inspector_index(self.info_tabs.indexOf(self._inspector_pages[page]))
 
@@ -400,18 +464,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         current = self.info_tabs.currentIndex()
         if current < 0 or not hasattr(self, 'combo_tab'):
             return
-        page = self.info_tabs.widget(current)
-        load_pages = [self._inspector_pages[item] for item in
-                      (self.actions_tab, self.static_tab, self.combo_tab, self.loads_tab)
-                      if item in self._inspector_pages]
         entries = {}
         kind = {item[0] for item in self._selected}
         if self.mode_3d.isChecked() and self._view3d is not None:
             view_index = self.info_tabs.indexOf(self._inspector_pages.get(self._view3d.controls))
             entries[view_index] = 'Inspeção 3D'
-        elif page in load_pages:
-            entries.update((self.info_tabs.indexOf(item), self.info_tabs.tabText(self.info_tabs.indexOf(item)))
-                           for item in load_pages[:3])
         else:
             entries[0] = 'Geometria'
         if not self.mode_3d.isChecked():
@@ -421,7 +478,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             nodes = self.session.model.node_map()
             if any(node in nodes for item, node in self._selected if item == 'node'):
                 entries[self.info_tabs.indexOf(self._inspector_pages[self.loads_tab])] = 'Cargas nodais'
-            if kind == {'member'} and page not in load_pages:
+            if kind == {'member'}:
                 entries[self.info_tabs.indexOf(self._inspector_pages[self.profile_tab])] = 'Perfis'
         entries.setdefault(current, self.info_tabs.tabText(current))
         with QSignalBlocker(self.context_tabs):
@@ -473,7 +530,62 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.view.snap_enabled = enabled
 
     def _show_coordinates(self, x, y):
-        self.coordinates.setText(f'X {x:,.1f}    Y {y:,.1f}    mm')
+        self._cursor_xy = x, y
+        self.coordinates.setText(f'X {self.units.length_text(x)}    Y {self.units.length_text(y)}')
+
+    def _update_unit_summary(self):
+        self.unit_summary.setText(f'{self.units.force} · {self.units.length}')
+        self.unit_button.setToolTip(f'Unidades de exibição · {self.units.force} · '
+                                    f'{self.units.length} · {self.units.stress}')
+
+    def open_units(self):
+        dialog = UnitsDialog(self.units, self)
+        dialog.adjustSize()
+        self._position_dialog(dialog)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.set_units(dialog.units())
+
+    def _position_dialog(self, dialog):
+        size = dialog.size().expandedTo(dialog.sizeHint())
+        screen = self.screen().availableGeometry()
+        anchor = self.mapToGlobal(QPoint(self.width() - size.width() - 28, 74))
+        x = max(screen.left(), min(anchor.x(), screen.right() - size.width()))
+        y = max(screen.top(), min(anchor.y(), screen.bottom() - size.height() - 40))
+        dialog.move(x, y)
+
+    def set_units(self, units):
+        if self.units == units:
+            return
+        default_load = self.load_table.currentRow() < 0 and not (self.fx.value() or self.fy.value())
+        editing_node = self.node_properties.isVisibleTo(self)
+        if editing_node:
+            coordinates = self._node_position()
+            supports = self.support_x.isChecked(), self.support_y.isChecked()
+        self.units = self.view.units = units
+        if self._settings is not None:
+            units.save(self._settings)
+        self._update_unit_summary()
+        self._fit_toolbar(self.width())
+        self.snap.set_label(f'Snap {units.length_text(self.view.grid_mm)}')
+        if default_load:
+            self.force_unit.setCurrentText(units.force)
+        if self._cursor_xy is not None:
+            self._show_coordinates(*self._cursor_xy)
+        else:
+            self.coordinates.setText(f'X —    Y —    {units.length}')
+        self.view.render(self.session, self.case_id)
+        self._update_selection(self._selected, show_properties=False)
+        if editing_node:
+            self._set_node_position_fields(*coordinates)
+            self.support_x.setChecked(supports[0])
+            self.support_y.setChecked(supports[1])
+        self.refresh_load_table(reset_selection=False)
+        self.refresh_result_table()
+        if self.result_table.currentRow() >= 0 and self.session.result:
+            item = self.result_table.item(self.result_table.currentRow(), 0)
+            if item:
+                self._show_result_detail(item.text())
+        self._sync_view3d()
 
     def _show_force_summary(self, forces, error):
         self.force_bar.setVisible(self.view.show_forces and not self.mode_3d.isChecked())
@@ -483,10 +595,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             return
         active = [(fx, fy) for fx, fy in forces.values() if hypot(fx, fy) > 1e-8]
         if active:
-            fx = fsum(x for x, _ in active) / 1000
-            fy = fsum(y for _, y in active) / 1000
+            fx = self.units.force_text(fsum(x for x, _ in active), signed=True, unit=False)
+            fy = self.units.force_text(fsum(y for _, y in active), signed=True)
             self.force_summary.setText(
-                f'{self.case_id} · {len(active)} nós com carga · ΣFx {fx:+.2f} · ΣFy {fy:+.2f} kN'
+                f'{self.case_id} · {len(active)} nós com carga · ΣFx {fx} · ΣFy {fy}'
             )
         else:
             self.force_summary.setText(f'{self.case_id or "Caso"} · Sem cargas nodais resultantes')
@@ -529,7 +641,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.node_properties = g
         self.node_id=QLineEdit();self.node_id.setReadOnly(True);f.addRow('ID',self.node_id)
         self.node_x=_spin(0,-1e9,1e9,2,50);self.node_y=_spin(0,-1e9,1e9,2,50)
-        f.addRow('X (mm)',self.node_x);f.addRow('Y (mm)',self.node_y)
+        for axis, spin in zip(('X', 'Y'), (self.node_x, self.node_y)):
+            spin.setLocale(LOCALE)
+            spin.setGroupSeparatorShown(True)
+            f.addRow(axis, spin)
+        self._set_node_position_fields(0., 0.)
         self.support_x=QCheckBox('Restringir UX');self.support_y=QCheckBox('Restringir UY')
         f.addRow('Apoio',self.support_x);f.addRow('',self.support_y)
         self.apply_node=_button('Aplicar posição e apoios', self.apply_node_properties, 'check')
@@ -581,6 +697,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         fields.addRow(components)
         self.force_unit = QComboBox()
         self.force_unit.addItems(['kN', 'N', 'kgf', 'tf'])
+        self.force_unit.setCurrentText(self.units.force)
         fields.addRow('Unidade', self.force_unit)
         self.commit_load = _button('Adicionar', self.add_load, 'add')
         fields.addRow(self.commit_load)
@@ -627,12 +744,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.result_mode.currentTextChanged.connect(self.refresh_result_table)
         col.addWidget(self.result_mode)
         col.addLayout(filter_row)
-        self.result_table=QTableWidget(0,4)
-        self.result_table.setHorizontalHeaderLabels(['Barra','Grupo','N (kN)','Perfil'])
-        self.result_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(3,QHeaderView.ResizeMode.Stretch)
+        self.result_table=QTableWidget(0,5)
+        self.result_table.setHorizontalHeaderLabels(self._result_headers('Perfil'))
+        for col_idx in range(4):
+            self.result_table.horizontalHeader().setSectionResizeMode(col_idx,QHeaderView.ResizeMode.ResizeToContents)
+        self.result_table.horizontalHeader().setSectionResizeMode(4,QHeaderView.ResizeMode.Stretch)
         self.result_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.result_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.result_table.itemSelectionChanged.connect(self.select_result)
@@ -667,12 +783,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.snap.setEnabled(not visible)
         self.grid.setEnabled(not visible)
         self.forces_button.setEnabled(not visible)
+        for overlay in ('show_ids', 'show_member_ids'):
+            self._overlay_buttons[overlay].setEnabled(not visible)
         self.force_bar.setVisible(self.view.show_forces and not visible)
         self._sync_context_tabs()
         self._refresh_property_summary()
 
     def _sync_view3d(self, *, fit=False):
         if self._view3d is not None and self.mode_3d.isChecked():
+            self._view3d.units = self.units
             self._view3d.refresh_model(self.session, self.case_id, fit=fit)
 
     def _shortcuts(self):
@@ -766,10 +885,12 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             with QSignalBlocker(self.load_case):
                 self.load_case.setCurrentIndex(index)
             self.refresh_load_table()
-        if (self.info_tabs.currentWidget() is self._inspector_pages.get(self.actions_tab)
-                and self.action_case.findText(text) >= 0):
-            self.action_case.setCurrentText(text)
+        for page, selector in ((self.actions_tab, self.action_case), (self.static_tab, self.static_case),
+                               (self.combo_tab, self.combination)):
+            if self._load_dialogs[page].isVisible() and selector.findText(text) >= 0:
+                selector.setCurrentText(text)
         self.case_id=text;self.view.render(self.session,self.case_id)
+        self._refresh_property_summary()
         self.refresh_result_table()
         self._sync_view3d()
 
@@ -824,15 +945,17 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             nodes={n.id:n for n in self.session.model.nodes}
             nodes.update({n['id']:type('Draft',(),{'x':n['x_mm'],'y':n['y_mm']})() for n in self.session.project.get('cad_drafts',[])})
             if id in nodes:
-                n=nodes[id];self.node_id.setText(id);self.node_x.setValue(n.x);self.node_y.setValue(n.y)
+                n=nodes[id];self.node_id.setText(id);self._set_node_position_fields(n.x,n.y)
                 ux,uy=self.session.model.supports.get(id,(False,False))
                 self.support_x.setChecked(ux);self.support_y.setChecked(uy)
-                self.selection_label.setText(f'Nó {id}  |  X={n.x:.2f} mm  Y={n.y:.2f} mm')
+                self.selection_label.setText(f'Nó {id}  |  X={self.units.length_text(n.x)}  '
+                                             f'Y={self.units.length_text(n.y)}')
                 if show_properties:self.info_tabs.setCurrentIndex(1)
         else:
             m=next((m for m in self.session.model.members if m.id==id),None)
             if m:
-                self.member_info.setText(f'{m.id} · {m.i} → {m.j}\n{m.profile}\nL={self.session.model.member_length(m):.2f} mm')
+                length = self.units.length_text(self.session.model.member_length(m))
+                self.member_info.setText(f'{m.id} · {m.i} → {m.j}\n{m.profile}\nL={length}')
                 self.group.setCurrentText(m.group)
                 self.selection_label.setText(f'Barra {id}' if len(selected) == 1 else
                                              f'{len(selected)} elementos selecionados')
@@ -872,20 +995,26 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 if node is not None:
                     ux, uy = model.supports.get(identifier, (False, False))
                     axes = ', '.join(axis for axis, active in [('UX', ux), ('UY', uy)] if active)
-                    group('Nó selecionado', [('ID', identifier), ('X', f'{node.x:,.2f} mm'),
-                                            ('Y', f'{node.y:,.2f} mm'), ('Apoio', axes or 'Livre')])
+                    group('Nó selecionado', [('ID', identifier), ('X', self.units.length_text(node.x)),
+                                            ('Y', self.units.length_text(node.y)), ('Apoio', axes or 'Livre')])
                 else:
                     draft = next((row for row in self.session.project.get('cad_drafts', [])
                                   if row['id'] == identifier), None)
                     if draft:
-                        group('Nó provisório', [('ID', identifier), ('X', f'{draft["x_mm"]:,.2f} mm'),
-                                                ('Y', f'{draft["y_mm"]:,.2f} mm')])
+                        group('Nó provisório', [('ID', identifier), ('X', self.units.length_text(draft['x_mm'])),
+                                                ('Y', self.units.length_text(draft['y_mm']))])
             else:
                 member = next((item for item in model.members if item.id == identifier), None)
                 if member:
-                    group('Barra selecionada', [('ID', identifier), ('Nós', f'{member.i} → {member.j}'),
-                          ('Grupo', member.group), ('Perfil', member.profile),
-                          ('Comprimento', f'{model.member_length(member):,.2f} mm')])
+                    values = [('ID', identifier), ('Nós', f'{member.i} → {member.j}'),
+                              ('Grupo', member.group), ('Perfil', member.profile),
+                              ('Comprimento', self.units.length_text(model.member_length(member)))]
+                    result = (self.session.result or {}).get('analyses', {}).get(self.case_id, {})
+                    force = result.get('axial_n', {}).get(identifier)
+                    if force is not None:
+                        values.extend([('Esforço normal', self.units.force_text(force, signed=True)),
+                                       ('Tensão axial', self.units.stress_text(force / member.area, signed=True))])
+                    group('Barra selecionada', values)
         elif selected:
             groups = [kind for kind, _ in selected]
             group('Seleção', [('Nós', groups.count('node')), ('Barras', groups.count('member'))])
@@ -933,13 +1062,30 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         nid=self.node_id.text()
         if not nid:return
         try:
-            p=editing.move_nodes(self.session.project,self.session.model,{nid:(self.node_x.value(),self.node_y.value())})
+            p=editing.move_nodes(self.session.project,self.session.model,{nid: self._node_position()})
             if nid not in {n['id'] for n in p.get('cad_drafts',[])}:
                 d=p['model_override'];d['supports']=[s for s in d['supports'] if s['node']!=nid]
                 if self.support_x.isChecked() or self.support_y.isChecked():
                     d['supports'].append({'node':nid,'ux':self.support_x.isChecked(),'uy':self.support_y.isChecked()})
         except Exception as exc:QMessageBox.warning(self,'Propriedades',str(exc));return
         self._apply(p,f'Propriedades de {nid} atualizadas')
+
+    def _node_position(self):
+        return tuple(original if spin.value() == display else spin.value() * self.units.length_scale
+                     for spin, (display, original) in
+                     zip((self.node_x, self.node_y), self._node_display_values))
+
+    def _set_node_position_fields(self, x, y):
+        scale = self.units.length_scale
+        baseline = []
+        for spin, value in zip((self.node_x, self.node_y), (x, y)):
+            spin.setDecimals(self.units.length_precision)
+            spin.setRange(-1e9 / scale, 1e9 / scale)
+            spin.setSingleStep(50 / scale)
+            spin.setSuffix(f' {self.units.length}')
+            spin.setValue(value / scale)
+            baseline.append((spin.value(), value))
+        self._node_display_values = tuple(baseline)
 
     def change_geometry(self,*_):
         if self._refreshing or 'model_override' in self.session.project:return
@@ -1000,7 +1146,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.load_node.setCurrentIndex(-1)
         self.fx.setValue(0)
         self.fy.setValue(0)
-        self.force_unit.setCurrentIndex(0)
+        self.force_unit.setCurrentText(self.units.force)
 
     def _load_case_changed(self, case):
         self.refresh_load_table()
@@ -1114,20 +1260,28 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         else:
             self.delete_selected()
 
-    def refresh_load_table(self):
+    def refresh_load_table(self, *, reset_selection=True):
         case = self._active_nodal_case()
         rows = case.get('loads', [])
         with QSignalBlocker(self.load_table):
             self.load_table.setRowCount(len(rows))
             for index, load in enumerate(rows):
-                values = (str(load['node']), str(load.get('fx', 0)), str(load.get('fy', 0)),
-                          load.get('force_unit', case.get('force_unit', 'kgf')))
+                input_unit = load.get('force_unit', case.get('force_unit', 'kgf'))
+                try:
+                    scale = FORCE_TO_N[input_unit]
+                    values = (str(load['node']),
+                              self.units.force_text(float(load.get('fx', 0)) * scale, unit=False),
+                              self.units.force_text(float(load.get('fy', 0)) * scale, unit=False),
+                              self.units.force)
+                except (KeyError, TypeError, ValueError):
+                    values = (str(load['node']), str(load.get('fx', 0)), str(load.get('fy', 0)), str(input_unit))
                 for column, value in enumerate(values):
                     item = QTableWidgetItem(value)
                     if column in (1, 2):
                         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     self.load_table.setItem(index, column, item)
-        self.clear_load_selection()
+        if reset_selection:
+            self.clear_load_selection()
 
 
     def calculate(self):
@@ -1139,8 +1293,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._set_results_visible(True)
         self.status('Análise concluída · verifique estados-limites e travamentos separadamente')
 
+    def _result_headers(self, profile_title):
+        return ['Barra', 'Grupo', f'N ({self.units.force})', f'σ ({self.units.stress})', profile_title]
+
+    def _result_row(self, member, force):
+        return (member.id, member.group, self.units.force_text(force, signed=True, unit=False),
+                self.units.stress_text(force / member.area, signed=True, unit=False), member.profile)
+
     def refresh_result_table(self,*_):
         if not hasattr(self,'result_table'):return
+        self.result_table.setHorizontalHeaderLabels(self._result_headers('Perfil'))
         res=self.session.result
         if not res:
             self.result_table.setRowCount(0);self.results_info.setText('Análise desatualizada — pressione F5');self.refresh_quick_table();return
@@ -1161,12 +1323,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if self.critical_only.isChecked():records=sorted(records,key=lambda m:abs(force(m.id)),reverse=True)[:10]
         self.result_table.blockSignals(True);self.result_table.setRowCount(len(records))
         for i,m in enumerate(records):
-            for j,val in enumerate((m.id,m.group,f'{force(m.id)/1000:+.2f}',m.profile)):
+            axial_force = force(m.id)
+            for j,val in enumerate(self._result_row(m, axial_force)):
                 item=QTableWidgetItem(str(val))
-                if j==2:item.setForeground(QColor('#C53646' if force(m.id)>0 else '#2666B8'))
+                if j in (2, 3):
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                    if axial_force:
+                        item.setForeground(QColor('#C53646' if axial_force>0 else '#2666B8'))
                 self.result_table.setItem(i,j,item)
         self.result_table.blockSignals(False)
-        self.results_info.setText(f'{mode} · {cid} · {len(records)} barras · N>0 tração · N<0 compressão')
+        self.results_info.setText(f'{mode} · {cid} · {len(records)} barras · Tração (+) · Compressão (−)')
         self.refresh_quick_table()
 
     def select_result(self):
@@ -1178,9 +1344,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         selection = [('member', mid)]
         self._set_canvas_selection(selection)
         self._update_selection(selection, show_properties=False)
-        e=self.session.result['envelope'][mid]
-        self.critical_detail.setText(f'{mid}\nTração máxima: {e["max_tension_n"]/1000:.2f} kN ({e["tension_case"]})\n'
-            f'Compressão máxima: {e["max_compression_n"]/1000:.2f} kN ({e["compression_case"]})')
+        self._show_result_detail(mid)
+
+    def _show_result_detail(self, member_id):
+        envelope = self.session.result['envelope'][member_id]
+        tension = self.units.force_text(envelope['max_tension_n'])
+        compression = self.units.force_text(envelope['max_compression_n'])
+        self.critical_detail.setText(
+            f'{member_id}\nTração máxima: {tension} ({envelope["tension_case"]})\n'
+            f'Compressão máxima: {compression} ({envelope["compression_case"]})')
 
     def _set_overlay(self, flag, visible):
         setattr(self.view, flag, visible)
@@ -1282,13 +1454,17 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         groups={
             'Concepção':('Geometria','Telha / modulação','Perfis'),
             'Modelagem':('Propriedades','Estabilidade'),
-            'Ações':('Padrões','Casos','Combinações','Cargas nodais'),
+            'Ações':('Cargas nodais',),
             'Análise':('Resultados','Alternativas','Diagnóstico','Inspeção 3D'),
         }
         assigned=set()
         for title,labels in groups.items():
             root=QTreeWidgetItem([title]);self.task_tree.addTopLevelItem(root)
             root.setFlags(root.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            if title == 'Ações':
+                for label in self._load_dialog_commands():
+                    entry = QTreeWidgetItem(root, [label])
+                    entry.setData(0, Qt.ItemDataRole.UserRole, label)
             for i in range(self.info_tabs.count()):
                 label=self.info_tabs.tabText(i)
                 if label in labels:
@@ -1308,15 +1484,21 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def task_clicked(self,item,column):
         index=item.data(0,Qt.ItemDataRole.UserRole)
+        if isinstance(index, str):
+            self._load_dialog_commands()[index]()
+            return
         if isinstance(index, int):
             if self.info_tabs.tabText(index) == 'Inspeção 3D':
                 self.open_3d()
             elif self.info_tabs.widget(index) is self._inspector_pages[self.loads_tab]:
                 self.open_nodal_loads()
-            elif self.info_tabs.widget(index) is self._inspector_pages[self.actions_tab]:
-                self.open_general_actions()
             else:
                 self._open_inspector_index(index)
+
+    def _load_dialog_commands(self):
+        return {'Tipos de Carregamentos': self.open_general_actions,
+                'Casos de Carregamentos': self.open_static_cases,
+                'Combinações': self.open_combinations}
 
     def update_task_selection(self,index):
         self._sync_context_tabs()
@@ -1349,6 +1531,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if not hasattr(self,'quick_table'):return
         self.quick_table.blockSignals(True)
         try:
+            self.quick_table.setHorizontalHeaderLabels(self._result_headers('Seção'))
             data=self.session.result
             if not data or not self.case_id or self.case_id not in data.get('analyses',{}):
                 self.quick_table.setRowCount(0)
@@ -1359,9 +1542,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.quick_table.setRowCount(len(records))
             for i,m in enumerate(records):
                 f=axial.get(m.id,0)
-                for j,val in enumerate((m.id,m.group,f'{f/1000:+.2f}',m.profile)):
+                for j,val in enumerate(self._result_row(m, f)):
                     cell=QTableWidgetItem(str(val))
-                    if j == 2:
+                    if j in (2, 3):
                         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                         if f:
                             cell.setForeground(QColor('#BC3D4E' if f>0 else '#2766A7'))
@@ -1374,6 +1557,6 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 def start():
     app=QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName('2DTruss');app.setStyle('Fusion')
-    window=DesktopApp();window.show()
+    window=DesktopApp(settings=QSettings('2DTruss', 'Desktop'));window.show()
     QTimer.singleShot(0,window.view.fit)
     return app.exec()

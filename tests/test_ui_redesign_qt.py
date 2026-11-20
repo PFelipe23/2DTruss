@@ -11,6 +11,53 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_display_units_convert_results_and_keep_the_model_revision(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from tempfile import TemporaryDirectory
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+        from desktop.qt.display_units import DisplayUnits
+
+        app = QApplication.instance() or QApplication([])
+        self.assertEqual([DisplayUnits(force=unit).force_text(10_000) for unit in ('tf', 'kgf', 'kN')],
+                         ['1,00 tf', '1.000 kgf', '10,00 kN'])
+        self.assertEqual([DisplayUnits(length=unit).length_text(1_000) for unit in ('m', 'mm', 'cm')],
+                         ['1,000 m', '1.000 mm', '100,0 cm'])
+        self.assertEqual(DisplayUnits().stress_text(25), '25,00 MPa')
+        units = DisplayUnits('kgf', 'cm', 'derived')
+        self.assertEqual(units.stress_text(25), '250,00 kgf/cm²')
+        self.assertEqual(DisplayUnits(force_digits=3).force_text(10_000), '10,000 kN')
+        with TemporaryDirectory() as directory:
+            settings = QSettings(str(Path(directory) / 'display.ini'), QSettings.Format.IniFormat)
+            units.save(settings)
+            settings.sync()
+            self.assertEqual(DisplayUnits.load(settings), units)
+
+        window = DesktopApp()
+        window.show()
+        try:
+            window.calculate()
+            revision, result = window.session.revision, window.session.result
+            window.set_units(units)
+            self.assertEqual(window.session.revision, revision)
+            self.assertIs(window.session.result, result)
+            self.assertEqual(window.quick_table.horizontalHeaderItem(3).text(), 'σ (kgf/cm²)')
+            member = window.quick_table.item(0, 0).text()
+            record = next(item for item in window.session.model.members if item.id == member)
+            axial = result['analyses'][window.case_id]['axial_n'][member]
+            self.assertEqual(window.quick_table.item(0, 3).text(),
+                             units.stress_text(axial / record.area, signed=True, unit=False))
+            window._set_overlay('show_member_ids', True)
+            self.assertTrue(window.view._identifiers)
+            self.assertTrue(all(not label.node for label in window.view._identifiers))
+            window._set_overlay('show_ids', True)
+            self.assertTrue(any(label.node for label in window.view._identifiers))
+            window._set_overlay('show_member_ids', False)
+            self.assertTrue(all(label.node for label in window.view._identifiers))
+        finally:
+            window.close()
+
     def test_workspace_context_and_3d_cube(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import QPointF, Qt
@@ -36,9 +83,16 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertNotIn('Cargas nodais', [window.context_tabs.tabText(i)
                                               for i in range(window.context_tabs.count())])
             window.open_general_actions()
-            self.assertTrue(window.task_host.isVisible())
-            self.assertEqual([window.context_tabs.tabText(i) for i in range(3)],
-                             ['Padrões', 'Casos', 'Combinações'])
+            self.assertTrue(window._load_dialogs[window.actions_tab].isVisible())
+            self.assertTrue(window.task_host.isHidden())
+            window.open_static_cases()
+            self.assertTrue(window._load_dialogs[window.static_tab].isVisible())
+            self.assertFalse(window._load_dialogs[window.actions_tab].isVisible())
+            window.open_combinations()
+            combo = window._load_dialogs[window.combo_tab]
+            self.assertTrue(combo.isVisible())
+            self.assertFalse(combo.isModal())
+            combo.close()
             window.mode_3d.click()
             cube = window._view3d.cube
             polygon = cube.faces['Superior XZ'][0]
@@ -49,7 +103,7 @@ class QtRedesignSmoke(unittest.TestCase):
         finally:
             window.close()
 
-    def test_force_vector_tips_align_with_nodes_and_labels_fit_without_overlap(self):
+    def test_force_vectors_enter_or_leave_nodes_and_labels_fit_without_overlap(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import QPointF
         from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem
@@ -57,12 +111,15 @@ class QtRedesignSmoke(unittest.TestCase):
         from desktop.qt.viewport import ForceVectorItem, NodeItem
 
         app = QApplication.instance() or QApplication([])
-        for fx, fy in [(0, -10), (0, 10), (10, 0), (-6, 8), (6, -8)]:
+        for fx, fy in [(0, -10), (0, 10), (10, 0), (-10, 0), (-6, 8), (6, -8)]:
             with self.subTest(fx=fx, fy=fy):
                 vector = ForceVectorItem('N1', QPointF(), fx, fy, 10)
                 tail, head = (vector.path().elementAt(i) for i in (0, 1))
-                self.assertAlmostEqual(head.x, -.7 * fx)
-                self.assertAlmostEqual(head.y, .7 * fy)
+                outward = (fy or fx) > 0
+                anchor = tail if outward else head
+                sign = 1 if outward else -1
+                self.assertAlmostEqual(anchor.x, sign * .7 * fx)
+                self.assertAlmostEqual(anchor.y, -sign * .7 * fy)
                 self.assertAlmostEqual(head.x - tail.x, 5 * fx)
                 self.assertAlmostEqual(head.y - tail.y, -5 * fy)
 
@@ -70,6 +127,7 @@ class QtRedesignSmoke(unittest.TestCase):
         window.show()
         try:
             window.open_general_actions()
+            window._load_dialogs[window.actions_tab].close()
             window.cases.setCurrentText('W_UP')
             window._set_overlay('show_ids', True)
             window.force_values.click()
@@ -77,7 +135,7 @@ class QtRedesignSmoke(unittest.TestCase):
             window.fit()
             view = window.view
             view.scale(.45, .45)
-            view._place_force_labels()
+            view._place_labels()
             transform = view.viewportTransform()
             annotations = {
                 item.text() for item in view.scene().items()
@@ -139,15 +197,15 @@ class QtRedesignSmoke(unittest.TestCase):
             QTest.mouseClick(window.batch_load, Qt.MouseButton.LeftButton)
             self.assertEqual(window.load_table.rowCount(), 2)
             self.assertEqual(len(window.view._force_items), 2)
-            self.assertIn('ΣFy -4.00', window.force_summary.text())
+            self.assertIn('ΣFy -4,00', window.force_summary.text())
 
             window.load_table.selectRow(0)
             window.fy.setValue(-1)
             QTest.mouseClick(window.commit_load, Qt.MouseButton.LeftButton)
             self.assertEqual(window.load_table.rowCount(), 2)
-            self.assertIn('ΣFy -3.00', window.force_summary.text())
+            self.assertIn('ΣFy -3,00', window.force_summary.text())
             window.cases.setCurrentText('COMB_UI')
-            self.assertIn('ΣFy -6.00', window.force_summary.text())
+            self.assertIn('ΣFy -6,00', window.force_summary.text())
             window.load_case.setCurrentText('Q_EMPTY')
             self.assertEqual(window.case_id, 'Q_EMPTY')
             self.assertFalse(window.view._force_items)
@@ -258,7 +316,7 @@ class QtRedesignSmoke(unittest.TestCase):
         window=DesktopApp(Session())
         try:
             self.assertGreater(window.task_tree.topLevelItemCount(),2)
-            self.assertGreater(window.info_tabs.count(),8)
+            self.assertGreaterEqual(window.info_tabs.count(),8)
             self.assertTrue(window.info_tabs.tabBar().isHidden())
             self.assertIsNotNone(window.quick_table)
             window.open_3d()

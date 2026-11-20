@@ -24,6 +24,7 @@ from desktop.section_mesh import load_shape_catalog,make_model_meshes,make_secti
 from desktop.bridge import CATALOG
 from poe_truss.model import GROUPS
 from .action_icons import IconButton
+from .display_units import DisplayUnits
 from .profile_picker import ProfilePicker
 
 DEFAULT={
@@ -209,6 +210,7 @@ class Truss3DView(QWidget):
         super().__init__(parent)
         self.session=session;self.case_id=case_id;self.colors=dict(DEFAULT)
         self._app = parent
+        self.units = getattr(parent, 'units', DisplayUnits())
         self.shape_catalog=load_shape_catalog(CATALOG)
         self._meshes=[];self._warnings=[];self._member_meta={};self._mesh_revision=None
         self._loading=False;self._selected_member=None
@@ -511,9 +513,11 @@ class Truss3DView(QWidget):
         meta=self._member_meta.get(mid,{})
         n=self.axial().get(mid)
         lines=[f'<b>{escape(mid)}</b> · {escape(m.group)}',escape(m.profile),
-               f'L = {self.session.model.member_length(m):.2f} mm',
+               f'L = {self.units.length_text(self.session.model.member_length(m))}',
                f'Componentes: {meta.get("components","?")}']
-        if n is not None:lines.append(f'N = {n/1000:+.2f} kN')
+        if n is not None:
+            lines.extend((f'N = {self.units.force_text(n, signed=True)}',
+                          f'σ = {self.units.stress_text(n / m.area, signed=True)}'))
         lines.extend(escape(str(v)) for v in meta.get('notes',[]))
         self.selected_label.setText('<br>'.join(lines))
 
@@ -569,7 +573,8 @@ class Truss3DView(QWidget):
                 node=QGraphicsEllipseItem(-3,-3,6,6);node.setPos(x,y)
                 node.setPen(QPen(QColor('#1D4259'),1))
                 node.setBrush(QBrush(QColor('#FFFFFF')))
-                node.setToolTip(f'Nó {n.id} | X={n.x:.2f} Y={n.y:.2f} mm')
+                node.setToolTip(f'Nó {n.id} | X={self.units.length_text(n.x)} '
+                                f'Y={self.units.length_text(n.y)}')
                 node.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations,True)
                 node.setZValue(9);scene.addItem(node)
                 self._overlays.append(node)

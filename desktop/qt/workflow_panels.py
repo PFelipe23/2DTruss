@@ -169,7 +169,13 @@ class WorkflowMixin:
         tab=QWidget();v=QVBoxLayout(tab)
         self.action_case=QComboBox();self.action_case.currentTextChanged.connect(self._populate_case)
         self.action_case.activated.connect(lambda _: self._show_load_case(self.action_case.currentText()))
-        v.addWidget(self.action_case)
+        command_line = QHBoxLayout()
+        command_line.addWidget(self.action_case, 1)
+        command_line.addWidget(row_buttons(('Adicionar padrão',self._new_action_case,'add'),
+                                          ('Aplicar alterações',self._apply_action_case,'check'),
+                                          ('Excluir padrão',self._delete_action_case,'delete'),
+                                          ('Conferir distribuição nodal',self._audit_selected_case,'table')))
+        v.addLayout(command_line)
         box=QGroupBox('Definição do padrão');f=QFormLayout(box)
         self.action_form = f
         self.action_name=QLineEdit()
@@ -196,13 +202,11 @@ class WorkflowMixin:
             ('Intensidade',self.action_value),('Unidade força',self.action_force_unit),
             ('Aplicação',self.action_application),('Base geométrica',self.action_basis),
             ('Direção',self.action_direction),('Região',self.action_zone)]:f.addRow(label,widget)
-        f.addRow(row_buttons(('Adicionar',self._new_action_case,'add'),('Aplicar',self._apply_action_case,'check'),
-                              ('Excluir',self._delete_action_case,'delete')))
-        f.addRow(row_buttons(('Conferir distribuição nodal',self._audit_selected_case,'table')))
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
-        v.addStretch(1);self.actions_tab=tab;self._add_inspector_page(tab,'Padrões')
+        v.addStretch(1);self.actions_tab=tab
+        self._add_load_dialog(tab, 'Tipos de Carregamentos', height=605)
 
     def _show_action_reference(self, *_):
         nature = self.action_class.currentData()
@@ -258,9 +262,9 @@ class WorkflowMixin:
         if not case:return
         try:
             _,audit=resolve_case_loads(self.session.model,case,patterns)
-            self.action_audit.setText(f'{cid}: {audit["n_entries"]} parcelas; '
-                f'ΣFx = {audit["sum_fx_n"]/1000:+.3f} kN; '
-                f'ΣFy = {audit["sum_fy_n"]/1000:+.3f} kN')
+            fx = self.units.force_text(audit['sum_fx_n'], signed=True)
+            fy = self.units.force_text(audit['sum_fy_n'], signed=True)
+            self.action_audit.setText(f'{cid} · {audit["n_entries"]} parcelas · ΣFx {fx} · ΣFy {fy}')
             self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Auditoria de ações',str(e))
 
@@ -301,12 +305,7 @@ class WorkflowMixin:
     def open_general_actions(self):
         if self.mode_3d.isChecked():
             self.set_3d_visible(False)
-        if self.focus_button.isChecked():
-            self._set_drawing_only(False)
-        self._show_inspector(self.actions_tab)
-        if self.action_case.findText(self.case_id or '') >= 0:
-            self.action_case.setCurrentText(self.case_id)
-        self._show_load_case(self.action_case.currentText())
+        self._open_load_dialog(self.actions_tab, self.action_case)
 
     def _build_static_cases_tab(self):
         self.static_tab = QWidget()
@@ -332,10 +331,14 @@ class WorkflowMixin:
         commands.addWidget(self.static_delete)
         commands.addStretch()
         layout.addLayout(commands)
-        self._add_inspector_page(self.static_tab, 'Casos')
+        self._add_load_dialog(self.static_tab, 'Casos de Carregamentos')
+
+    def open_static_cases(self):
+        self._open_load_dialog(self.static_tab, self.static_case)
 
     def _factor_editor(self, source_label):
         table = QTableWidget(0, 2)
+        table.setObjectName('factorTable')
         table.setHorizontalHeaderLabels([source_label, 'Fator'])
         table.verticalHeader().hide()
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -349,7 +352,11 @@ class WorkflowMixin:
             item.setToolTip(row.get('name', identifier))
             item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             table.setItem(i, 0, item)
-            table.setCellWidget(i, 1, field(float(factors.get(identifier, 0)), -1e6, 1e6, 6, .1))
+            spin = table.cellWidget(i, 1)
+            if spin is None:
+                spin = field(0, -1e6, 1e6, 6, .1)
+                table.setCellWidget(i, 1, spin)
+            spin.setValue(float(factors.get(identifier, 0)))
 
     def _read_factors(self, table):
         return {table.item(i, 0).text(): table.cellWidget(i, 1).value()
@@ -408,6 +415,7 @@ class WorkflowMixin:
     def _build_combinations_tab(self):
         tab=QWidget();v=QVBoxLayout(tab)
         self.combination=QComboBox();self.combination.currentTextChanged.connect(self._populate_combination)
+        self.combination.activated.connect(lambda _: self._show_load_case(self.combination.currentText()))
         v.addWidget(self.combination)
         self.combination_class = labeled_combo(workflow.COMBINATION_CLASSES.items())
         form = QFormLayout()
@@ -421,7 +429,10 @@ class WorkflowMixin:
         v.addWidget(row_buttons(('Nova combinação',self._new_combination,'add'),
                                 ('Aplicar fatores',self._apply_combination,'check'),
                                 ('Excluir',self._delete_combination,'delete')))
-        self.combo_tab=tab;self._add_inspector_page(tab,'Combinações')
+        self.combo_tab=tab;self._add_load_dialog(tab,'Combinações')
+
+    def open_combinations(self):
+        self._open_load_dialog(self.combo_tab, self.combination)
 
     def _populate_combination(self,*_):
         cid=self.combination.currentText()

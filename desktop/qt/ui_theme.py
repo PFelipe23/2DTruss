@@ -32,8 +32,14 @@ def workspace_palette():
 STYLE = r'''
 QMainWindow, QWidget {font-family:"Segoe UI",Arial;font-size:9pt;color:#263B4D;}
 QMainWindow {background:#F3F6F9;}
+QDialog#workspaceDialog, QWidget#loadDialogPage {background:#F3F6F9;}
+QScrollArea#loadDialogScroll {background:#F3F6F9;}
+QTableWidget#factorTable QDoubleSpinBox {min-height:17px;padding:3px;}
 QFrame#quickAccess {background:#182B3C;}
 QLabel#appHeader {color:#FFFFFF;font-weight:700;padding:0 14px 0 3px;}
+QLabel#unitSummary {color:#D6E8F4;padding:0 5px 0 1px;}
+QLabel#unitsSample {background:#EAF4FA;border:1px solid #CFDFEA;border-radius:4px;padding:8px;}
+QLabel#dialogHeading {font-weight:700;color:#183850;background:#E6F0F7;padding:8px;border-radius:4px;}
 QFrame#quickAccess QToolButton {color:#F2F7FB;background:#263C50;border-color:#40586C;padding:5px 2px;}
 QFrame#quickAccess QToolButton:hover, QFrame#quickAccess QToolButton:checked {background:#3C5C74;}
 QFrame#quickAccess QToolButton:checked {border-color:#76C8F4;}

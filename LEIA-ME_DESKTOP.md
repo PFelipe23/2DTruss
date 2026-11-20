@@ -28,7 +28,7 @@ Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2D
 
 ## Interface e atalhos
 
-- Barra única de ícones para arquivo, modelagem, cargas, exibição e cálculo. Passe o mouse por 500 ms para identificar um comando. **Mais comandos** abre importação, exportação e outras ferramentas.
+- Barra única de ícones para arquivo, modelagem, cargas, exibição, unidades e cálculo. Passe o mouse por 500 ms para identificar um comando. **Mais comandos** abre importação, exportação e outras ferramentas.
 - Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), caixa de seleção, zoom pela roda, ferramenta pan, ajuste da vista, escala vertical exclusivamente visual.
 - **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade de 50 mm. A posição só é aplicada ao modelo após soltar o mouse.
 - **Novo nó**: clique cria um *rascunho* de nó; ele passa ao modelo estrutural quando uma barra válida o conecta à malha existente. Isso impede nós isolados no solver.
@@ -87,19 +87,27 @@ A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e c
 
 ### Definir, aplicar e conferir cargas
 
-1. Em **Padrões**, cadastre as ações e sua natureza. A interface apresenta referências à ABNT NBR 6120 para ações em edificações, à ABNT NBR 6123 para vento e à ABNT NBR 8681 para ações excepcionais.
-2. Em **Casos**, crie um caso estático linear e indique os padrões aplicados e seus fatores.
+Os três ícones de definição de cargas abrem janelas flutuantes. O desenho continua disponível ao editar um carregamento.
+
+1. Em **Tipos de Carregamentos**, cadastre os padrões e sua natureza. A interface apresenta referências à ABNT NBR 6120 para ações em edificações, à ABNT NBR 6123 para vento e à ABNT NBR 8681 para ações excepcionais.
+2. Em **Casos de Carregamentos**, crie um caso estático linear e indique os padrões aplicados e seus fatores.
 3. Em **Combinações**, selecione a classificação ELU ou ELS e informe os fatores assinados dos casos. As intensidades, os coeficientes e o enquadramento normativo são definidos pelo projetista.
 
 Em **Inserir cargas nodais**, escolha ou crie um padrão nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a força, selecione vários nós com Ctrl+clique e use **Aplicar a n nós selecionados**. Clique numa parcela da tabela para editar ou remover a linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
 
-Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A ponta da seta encosta na borda do nó no eixo da força. O comprimento é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` em kN. **Valores** posiciona os rótulos em espaços livres. Passe o cursor sobre a seta ou o nó para ver as componentes.
+Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A cauda fica junto ao nó nas cargas ascendentes, e a ponta fica junto ao nó nas descendentes. Nas cargas puramente horizontais, o critério usa o sinal de `Fx`. O comprimento da seta é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` na unidade de exibição. **Valores** posiciona os rótulos em espaços livres. Passe o cursor sobre a seta ou o nó para ver as componentes.
+
+### Unidades de exibição
+
+O ícone de régua junto ao botão **Calcular** seleciona força, comprimento, tensão e casas decimais. A convenção nominal usa **1,00 tf = 1.000 kgf = 10,00 kN** e **1,000 m = 1.000 mm = 100,0 cm**. Para tensão axial, o padrão é **MPa com duas casas**. Também é possível exibir `σ = N/A` em força por comprimento ao quadrado, por exemplo kgf/cm².
+
+As preferências são gravadas localmente. O seletor atualiza o desenho, as propriedades e os resultados calculados sem alterar o projeto. Os formulários de carga conservam a unidade que identifica cada entrada, e os formatos de arquivo mantêm suas unidades documentadas.
 
 ## Área de trabalho
 
 À esquerda, **Propriedades** resume o objeto selecionado. **Modelo** filtra nós e barras por ID ou grupo e **Tarefas** abre as ferramentas do editor. À direita, as abas apresentam controles de coordenadas e apoios para nós, cargas nodais para seleção em nós e edição de grupo e perfil para barras. O botão de painel no canto superior direito do desenho recolhe ou expande o editor.
 
-O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas em milímetros e o estado da análise. Grade, snap e IDs dos nós são controles independentes na barra superior.
+O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas e o estado da análise. Grade, snap, identificadores de nós e identificadores de barras têm controles independentes na barra superior. A vista 2D prioriza rótulos com espaço livre e revela mais identificadores ao aproximar.
 
 `F5` calcula e abre a tabela inferior. Clique numa linha para inspecionar a barra ou use **Detalhar** para consultar filtros e envoltórias. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
 
