@@ -34,10 +34,13 @@ QMainWindow, QWidget {font-family:"Segoe UI",Arial;font-size:9pt;color:#263B4D;}
 QMainWindow {background:#F3F6F9;}
 QFrame#quickAccess {background:#182B3C;}
 QLabel#appHeader {color:#FFFFFF;font-weight:700;padding:0 14px 0 3px;}
-QFrame#quickAccess QToolButton {color:#F2F7FB;background:#263C50;border-color:#40586C;}
+QFrame#quickAccess QToolButton {color:#F2F7FB;background:#263C50;border-color:#40586C;padding:5px 2px;}
 QFrame#quickAccess QToolButton:hover, QFrame#quickAccess QToolButton:checked {background:#3C5C74;}
+QFrame#quickAccess QToolButton:checked {border-color:#76C8F4;}
+QFrame#quickAccess QToolButton::menu-indicator {image:none;}
 QFrame#quickAccess QToolButton#calculateButton {color:#FFFFFF;background:#0A689E;border-color:#3B91BD;font-weight:700;}
 QFrame#quickAccess QToolButton#calculateButton:hover {background:#08567F;}
+QFrame#toolDivider {background:#587084;margin:0;}
 QFrame#statusBar {background:#F3F6F9;border-top:1px solid #D3DEE7;}
 QLabel#coordinates {color:#344B60;font-family:"Consolas";font-size:9pt;}
 QWidget#taskPanel {background:#FFFFFF;}
@@ -46,6 +49,7 @@ QLabel#panelHeading {font-weight:700;color:#183850;padding:4px 5px 6px;}
 QTabWidget::pane {border:0;background:#FFFFFF;}
 QTabBar::tab {background:#ECF1F5;color:#344B60;padding:5px 12px;border-bottom:2px solid transparent;}
 QTabBar::tab:selected {background:#FFFFFF;color:#005987;font-weight:700;border-bottom:2px solid #137CB3;}
+QTabWidget#navigator QTabBar::tab, QWidget#taskPanel QTabBar::tab {padding:5px 7px;}
 QToolButton {background:#F7F9FB;border:1px solid #D5E0E9;border-radius:4px;padding:4px 8px;}
 QToolButton:hover {background:#E8F4FB;border-color:#9DBFD4;}
 QToolButton:pressed,QToolButton:checked {background:#DAECF8;color:#124765;border-color:#8CB5D0;}
@@ -67,9 +71,8 @@ QSplitter::handle {background:#DCE5ED;}
 QSplitter::handle:hover {background:#8CB5D0;}
 QScrollBar:vertical {background:#F4F7FA;width:9px;}
 QScrollBar::handle:vertical {background:#B6C9D8;border-radius:3px;min-height:22px;}
-QFrame#ribbonGroup {border-right:1px solid #D7E1EA;background:#FFFFFF;}
-QLabel#ribbonCaption {color:#526A7E;}
 QFrame#viewportBar {background:#EDF3F8;border-top:1px solid #D9E4ED;border-bottom:1px solid #D9E4ED;}
+QLabel#viewMode {color:#17658C;font-weight:700;}
 QFrame#forceBar {background:#FFF8ED;border-bottom:1px solid #E9D8BD;}
 QFrame#forceBar QLabel {color:#784517;}
 QLabel#calcPending {color:#78521A;background:#FFF0D5;border-radius:4px;padding:3px 8px;}

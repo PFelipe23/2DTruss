@@ -9,14 +9,15 @@ from queue import Queue, Empty
 from threading import Thread
 from PySide6.QtCore import Qt,QSignalBlocker,QTimer
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGroupBox,QFormLayout,QLabel,
-    QComboBox,QPushButton,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
+    QComboBox,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
     QHeaderView,QInputDialog,QMessageBox,QLineEdit,QTreeWidget,QTreeWidgetItem,
     QCheckBox,QAbstractItemView)
 from desktop import workflow
 from poe_truss.model import GROUPS,geometry_diagnostics
+from poe_truss.loads import load_patterns, resolve_case_loads
 from poe_truss.materials import STEEL_GRADES
 from poe_truss.search import suggest_geometry
-from .action_icons import action_icon
+from .action_icons import IconButton
 from .profile_picker import ProfilePicker
 
 
@@ -28,7 +29,8 @@ def field(value=0,low=0,high=1e8,dec=2,step=1):
 def row_buttons(*commands):
     w=QWidget();h=QHBoxLayout(w);h.setContentsMargins(0,0,0,0)
     for label,callback,icon in commands:
-        b=QPushButton(action_icon(icon), label);b.clicked.connect(callback);h.addWidget(b)
+        h.addWidget(IconButton(label, callback, icon))
+    h.addStretch()
     return w
 
 
@@ -43,6 +45,7 @@ class WorkflowMixin:
     def _build_engineering_tabs(self):
         self._build_profiles_tab()
         self._build_cases_tab()
+        self._build_static_cases_tab()
         self._build_combinations_tab()
         self._build_stability_tab()
         self._build_search_tab()
@@ -164,16 +167,19 @@ class WorkflowMixin:
 
     def _build_cases_tab(self):
         tab=QWidget();v=QVBoxLayout(tab)
-        v.addWidget(QLabel('Ações: G, Q e vento · valores fornecidos pelo projetista'))
         self.action_case=QComboBox();self.action_case.currentTextChanged.connect(self._populate_case)
         self.action_case.activated.connect(lambda _: self._show_load_case(self.action_case.currentText()))
         v.addWidget(self.action_case)
-        box=QGroupBox('Parâmetros do caso');f=QFormLayout(box)
+        box=QGroupBox('Definição do padrão');f=QFormLayout(box)
         self.action_form = f
         self.action_name=QLineEdit()
         self.action_kind = labeled_combo([('self_weight', 'Peso próprio'), ('surface', 'Superficial'),
                                           ('line', 'Linear'), ('nodal', 'Nodal')])
         self.action_kind.currentIndexChanged.connect(self._case_controls)
+        self.action_class = labeled_combo(workflow.ACTION_CLASSES.items())
+        self.action_reference = QLabel()
+        self.action_reference.setWordWrap(True)
+        self.action_class.currentIndexChanged.connect(self._show_action_reference)
         self.action_value=field(0,0,1e9,3,1)
         self.action_force_unit=QComboBox();self.action_force_unit.addItems(['kgf','kN','tf','N'])
         self.action_application = labeled_combo([('top', 'Banzo superior'), ('bottom', 'Banzo inferior')])
@@ -185,7 +191,8 @@ class WorkflowMixin:
         ])
         self.action_zone = labeled_combo([('all', 'Toda a treliça'), ('left', 'Metade esquerda'),
                                          ('right', 'Metade direita')])
-        for label,widget in [('Nome',self.action_name),('Tipo',self.action_kind),
+        for label,widget in [('Nome',self.action_name),('Natureza',self.action_class),
+            ('Referência', self.action_reference), ('Distribuição',self.action_kind),
             ('Intensidade',self.action_value),('Unidade força',self.action_force_unit),
             ('Aplicação',self.action_application),('Base geométrica',self.action_basis),
             ('Direção',self.action_direction),('Região',self.action_zone)]:f.addRow(label,widget)
@@ -195,11 +202,25 @@ class WorkflowMixin:
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
-        v.addStretch(1);self.actions_tab=tab;self._add_inspector_page(tab,'Ações gerais')
+        v.addStretch(1);self.actions_tab=tab;self._add_inspector_page(tab,'Padrões')
+
+    def _show_action_reference(self, *_):
+        nature = self.action_class.currentData()
+        reference = {
+            'permanent': 'ABNT NBR 6120 · ações em edificações',
+            'variable': 'ABNT NBR 6120 · ações em edificações',
+            'wind': 'ABNT NBR 6123 · ações do vento',
+            'exceptional': 'ABNT NBR 8681 · ações excepcionais',
+        }
+        self.action_reference.setText(reference.get(nature, 'Selecione a natureza da ação.'))
 
     def _case_controls(self,*_):
         kind = self.action_kind.currentData()
         general = kind in ('surface', 'line')
+        if kind == 'self_weight':
+            self.action_class.setCurrentIndex(self.action_class.findData('permanent'))
+        self.action_class.setEnabled(kind != 'self_weight')
+        self._show_action_reference()
         self.action_value.setSuffix(' /m²' if kind == 'surface' else ' /m')
         for w in (self.action_value,self.action_force_unit,self.action_application,self.action_basis,
                   self.action_direction,self.action_zone):
@@ -211,8 +232,11 @@ class WorkflowMixin:
 
     def _populate_case(self,*_):
         cid=self.action_case.currentText()
-        case=next((x for x in self.session.project.get('load_cases',[]) if x['id']==cid),None)
-        if not case:return
+        case=next((x for x in load_patterns(self.session.project) if x['id']==cid),None)
+        if not case:
+            self.action_name.clear()
+            self.action_value.setValue(0)
+            return
         self.action_force_unit.setCurrentText(case.get('force_unit', 'kgf'))
         pairs=[(self.action_kind,case.get('kind','surface')),
             (self.action_application,case.get('application','top')),
@@ -223,16 +247,17 @@ class WorkflowMixin:
             with QSignalBlocker(combo):
                 combo.setCurrentIndex(combo.findData(key))
         self.action_name.setText(case.get('name',cid))
+        self.action_class.setCurrentIndex(self.action_class.findData(workflow.pattern_class(case)))
         self.action_value.setValue(float(case.get('value',0)))
         self._case_controls()
 
     def _audit_selected_case(self):
         cid=self.action_case.currentText()
-        case=next((r for r in self.session.project.get('load_cases',[]) if r['id']==cid),None)
+        patterns = {pattern['id']: pattern for pattern in load_patterns(self.session.project)}
+        case = patterns.get(cid)
         if not case:return
         try:
-            from poe_truss.loads import build_case_loads
-            _,audit=build_case_loads(self.session.model,case)
+            _,audit=resolve_case_loads(self.session.model,case,patterns)
             self.action_audit.setText(f'{cid}: {audit["n_entries"]} parcelas; '
                 f'ΣFx = {audit["sum_fx_n"]/1000:+.3f} kN; '
                 f'ΣFy = {audit["sum_fy_n"]/1000:+.3f} kN')
@@ -240,11 +265,16 @@ class WorkflowMixin:
         except Exception as e:QMessageBox.warning(self,'Auditoria de ações',str(e))
 
     def _new_action_case(self):
-        name,ok=QInputDialog.getText(self,'Novo caso','Identificador do caso:')
+        name,ok=QInputDialog.getText(self,'Novo padrão','Identificador do padrão:')
+        if not ok:return
+        distributions = [self.action_kind.itemText(i) for i in range(self.action_kind.count())]
+        choice, ok = QInputDialog.getItem(self, 'Novo padrão', 'Distribuição da carga',
+                                          distributions, max(0, self.action_kind.currentIndex()), False)
         if not ok:return
         try:
-            p=workflow.add_load_case(self.session.project,name,'surface')
-            if self._apply(p,'Caso incluído'):
+            kind = self.action_kind.itemData(distributions.index(choice))
+            p=workflow.add_load_case(self.session.project,name,kind,pattern_only=True)
+            if self._apply(p,'Padrão incluído'):
                 self.action_case.setCurrentText(name.strip())
                 self._show_load_case(name.strip())
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
@@ -257,13 +287,15 @@ class WorkflowMixin:
                 name=self.action_name.text(),kind=self.action_kind.currentData(),
                 value=self.action_value.value(),force_unit=self.action_force_unit.currentText(),
                 application=self.action_application.currentData(),basis=self.action_basis.currentData(),
-                direction=self.action_direction.currentData(),zone=self.action_zone.currentData())
-            if self._apply(p,'Caso de carga modificado'):
+                direction=self.action_direction.currentData(),zone=self.action_zone.currentData(),
+                action_class=self.action_class.currentData())
+            if self._apply(p,'Padrão atualizado'):
                 self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
 
     def _delete_action_case(self):
-        try:self._apply(workflow.delete_load_case(self.session.project,self.action_case.currentText()),'Caso excluído')
+        if not self.action_case.currentText():return
+        try:self._apply(workflow.delete_load_case(self.session.project,self.action_case.currentText()),'Padrão excluído')
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))
 
     def open_general_actions(self):
@@ -276,14 +308,115 @@ class WorkflowMixin:
             self.action_case.setCurrentText(self.case_id)
         self._show_load_case(self.action_case.currentText())
 
+    def _build_static_cases_tab(self):
+        self.static_tab = QWidget()
+        layout = QVBoxLayout(self.static_tab)
+        self.static_caption = QLabel('Análise estática linear')
+        self.static_caption.setWordWrap(True)
+        layout.addWidget(self.static_caption)
+        self.static_case = QComboBox()
+        self.static_case.currentTextChanged.connect(self._populate_static_case)
+        self.static_case.activated.connect(lambda _: self._show_load_case(self.static_case.currentText()))
+        layout.addWidget(self.static_case)
+        form = QFormLayout()
+        self.static_name = QLineEdit()
+        form.addRow('Nome', self.static_name)
+        layout.addLayout(form)
+        self.pattern_factors = self._factor_editor('Padrão')
+        layout.addWidget(self.pattern_factors, 1)
+        commands = QHBoxLayout()
+        commands.addWidget(IconButton('Novo caso', self._new_static_case, 'add'))
+        self.static_apply = IconButton('Aplicar fatores', self._apply_static_case, 'check')
+        self.static_delete = IconButton('Excluir caso', self._delete_static_case, 'delete')
+        commands.addWidget(self.static_apply)
+        commands.addWidget(self.static_delete)
+        commands.addStretch()
+        layout.addLayout(commands)
+        self._add_inspector_page(self.static_tab, 'Casos')
+
+    def _factor_editor(self, source_label):
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels([source_label, 'Fator'])
+        table.verticalHeader().hide()
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        return table
+
+    def _fill_factors(self, table, definitions, factors):
+        table.setRowCount(len(definitions))
+        for i, row in enumerate(definitions):
+            identifier = row['id']
+            item = QTableWidgetItem(identifier)
+            item.setToolTip(row.get('name', identifier))
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            table.setItem(i, 0, item)
+            table.setCellWidget(i, 1, field(float(factors.get(identifier, 0)), -1e6, 1e6, 6, .1))
+
+    def _read_factors(self, table):
+        return {table.item(i, 0).text(): table.cellWidget(i, 1).value()
+                for i in range(table.rowCount())}
+
+    def _populate_static_case(self, *_):
+        cid = self.static_case.currentText()
+        case = next((row for row in self.session.project.get('load_cases', []) if row['id'] == cid), {})
+        self.static_name.setText(case.get('name', cid))
+        explicit = case.get('kind') == 'static'
+        self.static_caption.setText('Caso de arquivo anterior: edite a carga em Padrões.'
+                                    if case and not explicit else 'Análise estática linear')
+        self.static_name.setEnabled(explicit)
+        self.pattern_factors.setEnabled(explicit)
+        self.static_apply.setEnabled(explicit)
+        self.static_delete.setEnabled(explicit)
+        self._fill_factors(self.pattern_factors, load_patterns(self.session.project),
+                           case.get('patterns', {cid: 1} if case else {}))
+
+    def _new_static_case(self):
+        ident, ok = QInputDialog.getText(self, 'Novo caso estático', 'Identificador do caso')
+        if not ok:return
+        patterns = [row['id'] for row in load_patterns(self.session.project)]
+        if not patterns:
+            QMessageBox.warning(self, 'Casos', 'Cadastre um padrão de carga primeiro.')
+            return
+        pattern, ok = QInputDialog.getItem(self, 'Novo caso estático', 'Padrão inicial (fator 1)', patterns, 0, False)
+        if not ok:return
+        try:
+            p = workflow.update_static_case(self.session.project, ident, ident, {pattern: 1}, create=True)
+            if self._apply(p, 'Caso estático criado'):
+                self.static_case.setCurrentText(ident.strip())
+                self._show_load_case(ident.strip())
+        except ValueError as error:
+            QMessageBox.warning(self, 'Casos', str(error))
+
+    def _apply_static_case(self):
+        cid = self.static_case.currentText()
+        if not self.pattern_factors.isEnabled():return
+        try:
+            p = workflow.update_static_case(self.session.project, cid, self.static_name.text(),
+                                            self._read_factors(self.pattern_factors))
+            if self._apply(p, 'Caso estático atualizado'):
+                self._show_load_case(cid)
+        except ValueError as error:
+            QMessageBox.warning(self, 'Casos', str(error))
+
+    def _delete_static_case(self):
+        cid = self.static_case.currentText()
+        if not self.pattern_factors.isEnabled():return
+        try:
+            self._apply(workflow.delete_load_case(self.session.project, cid), 'Caso estático excluído')
+        except ValueError as error:
+            QMessageBox.warning(self, 'Casos', str(error))
+
     def _build_combinations_tab(self):
         tab=QWidget();v=QVBoxLayout(tab)
-        v.addWidget(QLabel('Combinações com fatores manuais assinados. Sem geração normativa automática.'))
         self.combination=QComboBox();self.combination.currentTextChanged.connect(self._populate_combination)
         v.addWidget(self.combination)
-        self.factor_table=QTableWidget(0,2)
-        self.factor_table.setHorizontalHeaderLabels(['Caso','Fator'])
-        self.factor_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.combination_class = labeled_combo(workflow.COMBINATION_CLASSES.items())
+        form = QFormLayout()
+        form.addRow('Classificação', self.combination_class)
+        v.addLayout(form)
+        reference = QLabel('ABNT NBR 8681 · informe os fatores de cada caso.')
+        reference.setWordWrap(True)
+        v.addWidget(reference)
+        self.factor_table = self._factor_editor('Caso')
         v.addWidget(self.factor_table,1)
         v.addWidget(row_buttons(('Nova combinação',self._new_combination,'add'),
                                 ('Aplicar fatores',self._apply_combination,'check'),
@@ -293,13 +426,8 @@ class WorkflowMixin:
     def _populate_combination(self,*_):
         cid=self.combination.currentText()
         combo=next((x for x in self.session.project.get('combinations',[]) if x['id']==cid),{})
-        cases=self.session.project.get('load_cases',[])
-        self.factor_table.setRowCount(len(cases))
-        for i,c in enumerate(cases):
-            item=QTableWidgetItem(c['id']);item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.factor_table.setItem(i,0,item)
-            sp=field(float(combo.get('factors',{}).get(c['id'],0)),-100,100,4,.1)
-            self.factor_table.setCellWidget(i,1,sp)
+        self.combination_class.setCurrentIndex(self.combination_class.findData(combo.get('combination_class', 'manual')))
+        self._fill_factors(self.factor_table, self.session.project.get('load_cases', []), combo.get('factors', {}))
 
     def _new_combination(self):
         cid,ok=QInputDialog.getText(self,'Combinação','ID da combinação:')
@@ -312,15 +440,14 @@ class WorkflowMixin:
     def _apply_combination(self):
         cid=self.combination.currentText()
         if not cid:return
-        factors={}
-        for i in range(self.factor_table.rowCount()):
-            key=self.factor_table.item(i,0).text()
-            factors[key]=self.factor_table.cellWidget(i,1).value()
-        try:self._apply(workflow.update_combination(self.session.project,cid,factors),'Combinação alterada')
+        factors = self._read_factors(self.factor_table)
+        try:self._apply(workflow.update_combination(self.session.project,cid,factors,
+                        self.combination_class.currentData()),'Combinação alterada')
         except Exception as e:QMessageBox.warning(self,'Combinações',str(e))
 
     def _delete_combination(self):
         cid=self.combination.currentText()
+        if not cid:return
         p=deepcopy(self.session.project);p['combinations']=[c for c in p.get('combinations',[]) if c['id']!=cid]
         self._apply(p,'Combinação excluída')
 
@@ -375,8 +502,8 @@ class WorkflowMixin:
         p=QGroupBox('Parâmetros da pesquisa');f=QFormLayout(p)
         self.search_case=QComboBox();f.addRow('Combinação/caso',self.search_case)
         self.search_flecha=field(250,50,2000,0,50);f.addRow('Limite L /',self.search_flecha)
-        self.search_button=QPushButton(action_icon('compare'), 'Pesquisar alternativas')
-        self.search_button.clicked.connect(self._start_search);f.addRow(self.search_button);v.addWidget(p)
+        self.search_button=IconButton('Pesquisar alternativas', self._start_search, 'compare')
+        f.addRow(self.search_button);v.addWidget(p)
         self.search_table=QTableWidget(0,5)
         self.search_table.setHorizontalHeaderLabels(['Painéis','Altura m','Massa kg','Flecha mm','Status'])
         self.search_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -461,10 +588,17 @@ class WorkflowMixin:
     def refresh_engineering_tabs(self):
         self.action_case.blockSignals(True)
         current=self.action_case.currentText();self.action_case.clear()
-        self.action_case.addItems([c['id'] for c in self.session.project.get('load_cases',[])])
+        self.action_case.addItems([c['id'] for c in load_patterns(self.session.project)])
         if current in [self.action_case.itemText(i) for i in range(self.action_case.count())]:
             self.action_case.setCurrentText(current)
         self.action_case.blockSignals(False);self._populate_case()
+        current = self.static_case.currentText()
+        with QSignalBlocker(self.static_case):
+            self.static_case.clear()
+            self.static_case.addItems([row['id'] for row in self.session.project.get('load_cases', [])])
+            if current:
+                self.static_case.setCurrentText(current)
+        self._populate_static_case()
         self.combination.blockSignals(True)
         current=self.combination.currentText();self.combination.clear()
         self.combination.addItems([c['id'] for c in self.session.project.get('combinations',[])])

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from math import isfinite
 from .model import make_model,geometry_diagnostics
-from .loads import build_case_loads,merge_forces,combination_audit
+from .loads import load_patterns,resolve_case_loads,merge_forces,combination_audit
 from .stability import resolve_stability
 from .sections import section_properties
 from .axial import axial_screen
@@ -23,15 +23,32 @@ def run_project(project:dict, catalog:dict) -> dict:
     raw={}
     load_audit={}
     case_meta=[]
+    definitions = load_patterns(project)
+    patterns = {pattern['id']: pattern for pattern in definitions}
+    if len(patterns) != len(definitions):
+        raise ValueError('ID de padrão de carga duplicado')
+    ids.update(pattern['id'] for pattern in project.get('load_patterns', []))
+    pattern_cache = {}
     for case in sources:
         cid=str(case.get('id','')).strip()
         if not cid or cid in ids:raise ValueError(f'ID de carregamento vazio ou duplicado: {cid}')
         ids.add(cid)
-        raw[cid],load_audit[cid]=build_case_loads(model,case)
-        case_meta.append({'id':cid,'name':case.get('name',cid),'kind':case.get('kind')})
+        if cid in pattern_cache:
+            raw[cid],load_audit[cid] = pattern_cache[cid]
+        else:
+            raw[cid],load_audit[cid] = resolve_case_loads(model, case, patterns, cache=pattern_cache)
+            if case['kind'] != 'static':
+                pattern_cache[cid] = raw[cid], load_audit[cid]
+        meta = {'id': cid, 'name': case.get('name', cid), 'kind': case.get('kind')}
+        if case['kind'] == 'static':
+            meta['patterns'] = dict(case['patterns'])
+        if 'action_class' in case:
+            meta['action_class'] = case['action_class']
+        case_meta.append(meta)
     combos=project.get('combinations',[])
     identifiers=set(ids)
     combinations={}
+    combination_meta = []
     for entry in combos:
         cid=str(entry.get('id','')).strip()
         if not cid or cid in identifiers:raise ValueError('ID de combinação inválido ou duplicado')
@@ -39,6 +56,10 @@ def run_project(project:dict, catalog:dict) -> dict:
         factors=entry.get('factors',{})
         if not factors:raise ValueError(f'Combinação {cid} sem fatores')
         combinations[cid]=factors
+        meta = {'id': cid, 'factors': factors}
+        if 'combination_class' in entry:
+            meta['combination_class'] = entry['combination_class']
+        combination_meta.append(meta)
     analyses={}
     for cid,force in raw.items():analyses[cid]=solver.analyze(force)
     for cid,factors in combinations.items():
@@ -85,7 +106,7 @@ def run_project(project:dict, catalog:dict) -> dict:
     if solver.pivot_ratio>1e9:
         notices.append('Sistema potencialmente mal condicionado: verificar deformações e geometria.')
     return {'schema':'poe-truss-result/v1','engine':'Python stdlib','model':model.to_dict(),
-            'load_cases':case_meta,'combinations':[{'id':k,'factors':v} for k,v in combinations.items()],
+            'load_cases':case_meta,'combinations':combination_meta,
             'analyses':analyses,'envelope':envelope,'geometry_diagnostics':diagnostics,
             'warnings':notices,'load_audit':load_audit,'stability':stability,
             'section_properties':section_data,'axial_screen':axial_data,'camber':camber,

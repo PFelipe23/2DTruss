@@ -11,7 +11,45 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
-    def test_force_vectors_stay_above_nodes_and_labels_fit_without_overlap(self):
+    def test_workspace_context_and_3d_cube(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QPointF, Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            app.processEvents()
+            self.assertEqual(window.mode_3d.toolButtonStyle(), Qt.ToolButtonStyle.ToolButtonIconOnly)
+            node = window.session.model.nodes[0]
+            window._update_selection([('node', node.id)])
+            self.assertEqual(window.property_summary.topLevelItem(0).child(0).text(1), node.id)
+            self.assertIn('Cargas nodais', [window.context_tabs.tabText(i)
+                                           for i in range(window.context_tabs.count())])
+            window.inspector_toggle.click()
+            member = window.session.model.members[0]
+            window._update_selection([('member', member.id)])
+            self.assertTrue(window.task_host.isHidden())
+            self.assertNotIn('Cargas nodais', [window.context_tabs.tabText(i)
+                                              for i in range(window.context_tabs.count())])
+            window.open_general_actions()
+            self.assertTrue(window.task_host.isVisible())
+            self.assertEqual([window.context_tabs.tabText(i) for i in range(3)],
+                             ['Padrões', 'Casos', 'Combinações'])
+            window.mode_3d.click()
+            cube = window._view3d.cube
+            polygon = cube.faces['Superior XZ'][0]
+            point = sum(polygon, QPointF()) / 4
+            QTest.mouseClick(cube, Qt.MouseButton.LeftButton, pos=point.toPoint())
+            self.assertEqual(window._view3d._angles, (0, 90))
+            self.assertEqual(list(cube.faces), ['Superior XZ'])
+        finally:
+            window.close()
+
+    def test_force_vector_tips_align_with_nodes_and_labels_fit_without_overlap(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import QPointF
         from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem
@@ -23,7 +61,8 @@ class QtRedesignSmoke(unittest.TestCase):
             with self.subTest(fx=fx, fy=fy):
                 vector = ForceVectorItem('N1', QPointF(), fx, fy, 10)
                 tail, head = (vector.path().elementAt(i) for i in (0, 1))
-                self.assertLess(vector.boundingRect().bottom(), -7)
+                self.assertAlmostEqual(head.x, -.7 * fx)
+                self.assertAlmostEqual(head.y, .7 * fy)
                 self.assertAlmostEqual(head.x - tail.x, 5 * fx)
                 self.assertAlmostEqual(head.y - tail.y, -5 * fy)
 

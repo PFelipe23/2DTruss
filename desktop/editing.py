@@ -152,7 +152,7 @@ def delete_elements(project:dict,model,node_ids=(),member_ids=())->dict:
     d['nodes']=[n for n in d['nodes'] if n['id'] not in remove_nodes]
     p['cad_drafts']=[n for n in p.get('cad_drafts',[]) if n['id'] not in remove_nodes]
     d['supports']=[s for s in d['supports'] if s['node'] not in remove_nodes]
-    for c in p.get('load_cases',[]):
+    for c in [*p.get('load_cases', []), *p.get('load_patterns', [])]:
         if c.get('kind')=='nodal':c['loads']=[r for r in c.get('loads',[]) if r['node'] not in remove_nodes]
     stability=p.get('stability',{})
     for mid in remove_members:stability.get('members',{}).pop(mid,None)

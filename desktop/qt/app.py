@@ -1,4 +1,4 @@
-"""2DTruss v0.1 — desktop PySide6 com ribbons e QGraphicsScene.
+"""2DTruss v0.1 — desktop PySide6 com barra de ferramentas e QGraphicsScene.
 
 A lógica estrutural é delegada a desktop.bridge.Session / poe_truss.
 Nenhum navegador, servidor HTTP ou webview integra o processo desktop.
@@ -7,23 +7,23 @@ from __future__ import annotations
 from copy import deepcopy
 from math import fsum, hypot
 from pathlib import Path
-import json
 import sys
 
-from PySide6.QtCore import Qt,QSignalBlocker,QSize,QTimer
-from PySide6.QtGui import QAction,QKeySequence,QColor,QFont,QPen
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,
-    QLabel,QPushButton,QToolButton,QComboBox,QDoubleSpinBox,QSpinBox,QCheckBox,QSplitter,
+from PySide6.QtCore import Qt,QSignalBlocker,QTimer
+from PySide6.QtGui import QAction,QKeySequence,QColor,QPen
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,
+    QLabel,QToolButton,QComboBox,QDoubleSpinBox,QSpinBox,QCheckBox,QSplitter,
     QTreeWidget,QTreeWidgetItem,QTabWidget,QFormLayout,QGroupBox,QLineEdit,QFileDialog,
     QMessageBox,QInputDialog,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,
-    QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QGraphicsLineItem,QFrame,QSizePolicy,
-    QButtonGroup,QScrollArea,QStackedWidget)
+    QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QFrame,QSizePolicy,
+    QButtonGroup,QScrollArea,QStackedWidget,QTabBar,QMenu)
 
 from desktop.bridge import Session,load_project,write_project
 from desktop import editing,cad_io,workflow
 from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html,ftool_comparison_full_rows
+from poe_truss.loads import load_patterns
 from poe_truss.version import APP_NAME, TAG
-from .action_icons import action_icon
+from .action_icons import action_icon, IconButton as _button
 from .viewport import TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
@@ -31,18 +31,6 @@ from .ui_theme import STYLE,workspace_palette
 
 APP_TITLE=f'{APP_NAME} {TAG}'
 STYLESHEET=STYLE
-
-
-def _button(label, callback, icon, *, checkable=False, light=False):
-    button = QToolButton()
-    button.setText(label)
-    button.setToolTip(label)
-    button.setCheckable(checkable)
-    button.setIcon(action_icon(icon, light=light))
-    button.setIconSize(QSize(16, 16))
-    button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    button.clicked.connect(callback)
-    return button
 
 
 def _spin(value,minimum,maximum,decimals=2,step=1):
@@ -128,7 +116,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._cad_buttons = {}
         self._overlay_buttons = {}
         self._drawing_only = False
-        self._build_ribbon(main)
+        self._inspector_collapsed = False
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -138,7 +126,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.navigator = QTabWidget()
         self.navigator.setObjectName('navigator')
         self.navigator.setDocumentMode(True)
-        self.navigator.setMinimumWidth(176)
+        self.navigator.setMinimumWidth(182)
+        self.property_summary = QTreeWidget()
+        self.property_summary.setColumnCount(2)
+        self.property_summary.setHeaderLabels(['Propriedade', 'Valor'])
+        self.property_summary.setIndentation(12)
+        self.property_summary.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.property_summary.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.property_summary.setAlternatingRowColors(True)
+        self.property_summary.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.navigator.addTab(self.property_summary, 'Propriedades')
         model = QWidget()
         model_layout = QVBoxLayout(model)
         model_layout.setContentsMargins(9, 10, 9, 9)
@@ -170,9 +167,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         strip = QHBoxLayout(bar)
         strip.setContentsMargins(8, 4, 8, 4)
         strip.setSpacing(4)
-        for label, command, icon in [('Selecionar', 'select', 'select'), ('Mover', 'move', 'move'),
-                                     ('Pan', 'pan', 'pan'), ('Enquadrar', self.fit, 'fit')]:
-            strip.addWidget(self._workspace_button(label, command, icon))
+        self.mode_3d = _button('Alternar entre 2D e 3D', self.set_3d_visible, 'cube', checkable=True)
+        strip.addWidget(self.mode_3d)
+        self.view_mode_label = QLabel('2D')
+        self.view_mode_label.setObjectName('viewMode')
+        strip.addWidget(self.view_mode_label)
         strip.addStretch()
         self.cases = QComboBox()
         self.cases.setAccessibleName('Caso ou combinação exibida')
@@ -182,10 +181,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         strip.addWidget(QLabel('Caso'))
         strip.addWidget(self.cases)
         self.forces_button = _button('Cargas', lambda visible: self._set_overlay('show_forces', visible),
-                                     'load', checkable=True)
-        strip.addWidget(self.forces_button)
+                                     'load_view', checkable=True, light=True)
         self.results_button = _button('Resultados', self._set_results_visible, 'table', checkable=True)
-        strip.addWidget(self.results_button)
+        self.inspector_toggle = _button('Recolher ou expandir o painel direito',
+                                        self._set_inspector_collapsed, 'panel', checkable=True)
+        strip.addWidget(self.inspector_toggle)
         center_layout.addWidget(bar)
         self.force_bar = QFrame()
         self.force_bar.setObjectName('forceBar')
@@ -214,7 +214,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         result_header = QHBoxLayout()
         self.dock_info = QLabel()
         result_header.addWidget(self.dock_info, 1)
-        result_header.addWidget(_button('Detalhar', lambda: self.info_tabs.setCurrentIndex(3), 'report'))
+        result_header.addWidget(_button('Detalhar', lambda: self._open_inspector_index(3), 'report'))
         result_layout.addLayout(result_header)
         self.quick_table = QTableWidget(0, 4)
         self.quick_table.setHorizontalHeaderLabels(['Barra', 'Grupo', 'N (kN)', 'Seção'])
@@ -244,16 +244,22 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         inspector = QVBoxLayout(self.task_host)
         inspector.setContentsMargins(8, 8, 8, 6)
         inspector.setSpacing(4)
-        self.inspector_title = QLabel('Geometria')
+        self.inspector_title = QLabel('Editor')
         self.inspector_title.setObjectName('panelHeading')
         inspector.addWidget(self.inspector_title)
+        self.context_tabs = QTabBar()
+        self.context_tabs.setDrawBase(False)
+        self.context_tabs.setExpanding(False)
+        self.context_tabs.setUsesScrollButtons(True)
+        self.context_tabs.currentChanged.connect(self._context_changed)
+        inspector.addWidget(self.context_tabs)
         self.info_tabs = QTabWidget()
         self.info_tabs.tabBar().hide()
         self._inspector_pages = {}
         self.info_tabs.currentChanged.connect(self.update_task_selection)
         inspector.addWidget(self.info_tabs, 1)
         self.splitter.addWidget(self.task_host)
-        self.splitter.setSizes([208, 850, 352])
+        self.splitter.setSizes([220, 770, 330])
         self.splitter.setStretchFactor(1, 1)
         self._build_model_tab()
         self._build_property_tab()
@@ -278,105 +284,85 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         status.addWidget(self.coordinates)
         self.snap = _button('Snap 50 mm', self._set_snap, 'snap', checkable=True)
         self.snap.setChecked(self.view.snap_enabled)
-        status.addWidget(self.snap)
         self.grid = _button('Grade', self.view.set_grid_visible, 'grid', checkable=True)
         self.grid.setChecked(self.view.grid_visible)
-        status.addWidget(self.grid)
         self.calc_badge = QLabel('Não calculado')
         self.calc_badge.setObjectName('calcPending')
         status.addWidget(self.calc_badge)
         main.addWidget(footer)
+        self._build_toolbar(main)
 
-    def _build_ribbon(self, main):
-        quick = QFrame()
-        quick.setObjectName('quickAccess')
-        line = QHBoxLayout(quick)
-        line.setContentsMargins(10, 4, 10, 4)
-        line.setSpacing(4)
+    def _build_toolbar(self, main):
+        self.toolbar = QFrame()
+        self.toolbar.setObjectName('quickAccess')
+        line = QHBoxLayout(self.toolbar)
+        line.setContentsMargins(8, 5, 8, 5)
+        line.setSpacing(3)
         brand = QLabel(APP_TITLE)
         brand.setObjectName('appHeader')
         line.addWidget(brand)
-        for label, command, icon in [
-            ('Novo', self.new, 'new'),
-            ('Abrir', self.open, 'open'),
-            ('Salvar', self.save, 'save'),
-        ]:
-            line.addWidget(_button(label, command, icon, light=True))
-        line.addStretch()
-        self.focus_button = _button('Só desenho', self._set_drawing_only, 'focus', checkable=True, light=True)
-        self.focus_button.setToolTip('Recolher ou restaurar os painéis (Ctrl+0)')
+        groups = (
+            (('Novo', self.new, 'new'), ('Abrir projeto', self.open, 'open'),
+             ('Salvar', self.save, 'save'), ('Desfazer', self.undo, 'undo'), ('Refazer', self.redo, 'redo')),
+            (('Selecionar', 'select', 'select'), ('Mover nós', 'move', 'move'), ('Deslocar vista', 'pan', 'pan'),
+             ('Enquadrar', self.fit, 'fit'), ('Criar nó', 'node', 'node'), ('Criar barra', 'bar', 'member'),
+             ('Subdividir barra', 'split', 'split'), ('Excluir seleção', self.delete_selected, 'delete')),
+            (('Padrões de carga', self.open_general_actions, 'actions'),
+             ('Casos de carga', lambda: self._show_inspector(self.static_tab), 'case'),
+             ('Combinações de carga', lambda: self._show_inspector(self.combo_tab), 'combine'),
+             ('Inserir cargas nodais', self.open_nodal_loads, 'load'),
+             ('Perfis e aço', self._open_profiles, 'profile')),
+        )
+        for group in groups:
+            for label, command, icon in group:
+                line.addWidget(self._workspace_button(label, command, icon, light=True))
+            divider = QFrame()
+            divider.setObjectName('toolDivider')
+            divider.setFixedSize(1, 19)
+            line.addWidget(divider)
+
+        for label, flag, icon in [('IDs dos nós', 'show_ids', 'ids'), ('Esforços', 'show_efforts', 'force'),
+                                  ('Deformada', 'show_deformed', 'deformed')]:
+            line.addWidget(self._workspace_button(label, flag, icon, light=True))
+        self._overlay_buttons['show_forces'] = self.forces_button
+        for button, icon in [(self.forces_button, 'load_view'), (self.results_button, 'table'),
+                             (self.snap, 'snap'), (self.grid, 'grid')]:
+            button.setIcon(action_icon(icon, light=True))
+            line.addWidget(button)
+        self.focus_button = _button('Só desenho (Ctrl+0)', self._set_drawing_only,
+                                    'focus', checkable=True, light=True)
         line.addWidget(self.focus_button)
-        self.mode_3d = _button('2D | 3D', self.set_3d_visible, 'cube', checkable=True, light=True)
-        self.mode_3d.setToolTip('Alternar entre desenho 2D e inspeção 3D')
-        line.addWidget(self.mode_3d)
-        run = _button('Calcular', self.calculate, 'run', light=True)
-        run.setObjectName('calculateButton')
-        run.setToolTip('Calcular o modelo (F5)')
-        line.addWidget(run)
-        main.addWidget(quick)
 
-        self.ribbon = QTabWidget()
-        self.ribbon.setObjectName('ribbon')
-        self.ribbon.setDocumentMode(True)
-        main.addWidget(self.ribbon)
-        for tab, groups in [
-            ('Arquivo', [('Projeto', [('Novo', self.new, 'new'), ('Abrir JSON', self.open, 'open'),
-                                      ('Salvar', self.save, 'save')]),
-                         ('Importação', [('DXF / DWG', self.import_cad, 'import')]),
-                         ('Histórico', [('Desfazer', self.undo, 'undo'), ('Refazer', self.redo, 'redo')])]),
-            ('Modelagem', [('Criar', [('Nó', 'node', 'node'), ('Barra', 'bar', 'member')]),
-                           ('Editar', [('Subdividir', 'split', 'split'), ('Excluir', self.delete_selected, 'delete')]),
-                           ('Atribuir', [('Grupo da barra', self.change_group, 'group'),
-                                         ('Perfis', lambda: self._show_inspector(self.profile_tab), 'profile')])]),
-            ('Ações', [('Cargas nodais', [('Inserir cargas', self.open_nodal_loads, 'load'),
-                                         ('Novo caso', self.add_case, 'add')]),
-                       ('Modelo', [('Apoios X/Y', lambda: self.info_tabs.setCurrentIndex(1), 'support'),
-                                   ('Ações gerais', self.open_general_actions, 'actions'),
-                                   ('Combinações', lambda: self._show_inspector(self.combo_tab), 'combine')])]),
-            ('Análise', [('Consultar', [('Esforços', lambda: self._set_results_visible(True), 'table'),
-                                       ('Alternativas', lambda: self._show_inspector(self.search_tab), 'compare'),
-                                       ('Diagnóstico', lambda: self._show_inspector(self.diagnostics_tab), 'diagnostic')]),
-                         ('Exportar', [('DimPerfil CSV', self.export_csv, 'export'),
-                                       ('Memorial A3', self.export_memorial, 'report')])]),
-            ('Exibição', [('Sobreposições', [('IDs dos nós', 'show_ids', 'ids'),
-                                           ('Esforços', 'show_efforts', 'force'),
-                                           ('Deformada', 'show_deformed', 'deformed'),
-                                           ('Forças', 'show_forces', 'load')]),
-                          ('Vista', [('Escala vertical', self.change_vertical, 'vertical'),
-                                     ('Vista 3D', self.open_3d, 'cube')])]),
+        more = _button('Mais comandos', lambda: None, 'more', light=True)
+        menu = QMenu(more)
+        for label, command, icon in [
+            ('Importar DXF / DWG', self.import_cad, 'import'),
+            ('Apoios e seleção', lambda: self._open_inspector_index(1), 'support'),
+            ('Alternativas', lambda: self._show_inspector(self.search_tab), 'compare'),
+            ('Diagnóstico', lambda: self._show_inspector(self.diagnostics_tab), 'diagnostic'),
+            ('Exportar DimPerfil CSV', self.export_csv, 'export'),
+            ('Exportar memorial A3', self.export_memorial, 'report'),
+            ('Escala vertical', self.change_vertical, 'vertical'),
         ]:
-            page = QWidget()
-            groups_layout = QHBoxLayout(page)
-            groups_layout.setContentsMargins(7, 4, 7, 4)
-            groups_layout.setSpacing(0)
-            for title, commands in groups:
-                group = QFrame()
-                group.setObjectName('ribbonGroup')
-                group_layout = QVBoxLayout(group)
-                group_layout.setContentsMargins(7, 0, 9, 0)
-                group_layout.setSpacing(2)
-                buttons = QHBoxLayout()
-                buttons.setSpacing(3)
-                for label, command, icon in commands:
-                    buttons.addWidget(self._workspace_button(label, command, icon))
-                group_layout.addLayout(buttons)
-                caption = QLabel(title)
-                caption.setObjectName('ribbonCaption')
-                caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                group_layout.addWidget(caption)
-                groups_layout.addWidget(group)
-            groups_layout.addStretch(1)
-            self.ribbon.addTab(page, tab)
-        self.ribbon.setCurrentIndex(1)
+            menu.addAction(action_icon(icon), label, command)
+        more.setMenu(menu)
+        more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        line.addWidget(more)
+        line.addStretch(1)
+        run = _button('Calcular (F5)', self.calculate, 'run', light=True)
+        run.setObjectName('calculateButton')
+        line.addWidget(run)
+        main.insertWidget(0, self.toolbar)
 
-    def _workspace_button(self, label, command, icon):
+    def _workspace_button(self, label, command, icon, *, light=False):
         if not isinstance(command, str):
-            return _button(label, command, icon)
+            return _button(label, command, icon, light=light)
         if command.startswith('show_'):
-            button = _button(label, lambda enabled: self._set_overlay(command, enabled), icon, checkable=True)
+            button = _button(label, lambda enabled: self._set_overlay(command, enabled),
+                             icon, checkable=True, light=light)
             self._overlay_buttons[command] = button
             return button
-        button = _button(label, lambda: self.choose_tool(command), icon, checkable=True)
+        button = _button(label, lambda: self.choose_tool(command), icon, checkable=True, light=light)
         self.tool_buttons.addButton(button)
         self._cad_buttons[command] = button
         button.setChecked(command == 'select')
@@ -393,7 +379,77 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.info_tabs.addTab(scroll, title)
 
     def _show_inspector(self, page):
-        self.info_tabs.setCurrentWidget(self._inspector_pages[page])
+        self._open_inspector_index(self.info_tabs.indexOf(self._inspector_pages[page]))
+
+    def _open_inspector_index(self, index):
+        if self._drawing_only:
+            self._set_drawing_only(False)
+        self._set_inspector_collapsed(False)
+        self.info_tabs.setCurrentIndex(index)
+
+    def _set_inspector_collapsed(self, collapsed):
+        self._inspector_collapsed = collapsed
+        self.inspector_toggle.setChecked(collapsed)
+        self.inspector_toggle.setIcon(action_icon('collapse' if collapsed else 'panel'))
+        tip = 'Expandir o painel direito' if collapsed else 'Recolher o painel direito'
+        self.inspector_toggle.setToolTip(tip)
+        self.inspector_toggle.setAccessibleName(tip)
+        self.task_host.setVisible(not collapsed and not self._drawing_only)
+
+    def _sync_context_tabs(self):
+        current = self.info_tabs.currentIndex()
+        if current < 0 or not hasattr(self, 'combo_tab'):
+            return
+        page = self.info_tabs.widget(current)
+        load_pages = [self._inspector_pages[item] for item in
+                      (self.actions_tab, self.static_tab, self.combo_tab, self.loads_tab)
+                      if item in self._inspector_pages]
+        entries = {}
+        kind = {item[0] for item in self._selected}
+        if self.mode_3d.isChecked() and self._view3d is not None:
+            view_index = self.info_tabs.indexOf(self._inspector_pages.get(self._view3d.controls))
+            entries[view_index] = 'Inspeção 3D'
+        elif page in load_pages:
+            entries.update((self.info_tabs.indexOf(item), self.info_tabs.tabText(self.info_tabs.indexOf(item)))
+                           for item in load_pages[:3])
+        else:
+            entries[0] = 'Geometria'
+        if not self.mode_3d.isChecked():
+            if kind:
+                entries[1] = 'Nó' if kind == {'node'} and len(self._selected) == 1 else (
+                    'Barras' if kind == {'member'} else 'Seleção')
+            nodes = self.session.model.node_map()
+            if any(node in nodes for item, node in self._selected if item == 'node'):
+                entries[self.info_tabs.indexOf(self._inspector_pages[self.loads_tab])] = 'Cargas nodais'
+            if kind == {'member'} and page not in load_pages:
+                entries[self.info_tabs.indexOf(self._inspector_pages[self.profile_tab])] = 'Perfis'
+        entries.setdefault(current, self.info_tabs.tabText(current))
+        with QSignalBlocker(self.context_tabs):
+            while self.context_tabs.count():
+                self.context_tabs.removeTab(0)
+            for index, title in entries.items():
+                tab = self.context_tabs.addTab(title)
+                self.context_tabs.setTabData(tab, index)
+                if index == current:
+                    self.context_tabs.setCurrentIndex(tab)
+
+    def _context_changed(self, tab):
+        if tab < 0:
+            return
+        index = self.context_tabs.tabData(tab)
+        if self.info_tabs.widget(index) is self._inspector_pages.get(self.loads_tab):
+            self.open_nodal_loads()
+        elif self.info_tabs.widget(index) is self._inspector_pages.get(self.profile_tab):
+            self._open_profiles()
+        else:
+            self.info_tabs.setCurrentIndex(index)
+
+    def _open_profiles(self):
+        selected = {identifier for kind, identifier in self._selected if kind == 'member'}
+        groups = {member.group for member in self.session.model.members if member.id in selected}
+        if len(groups) == 1:
+            self.section_group.setCurrentText(next(iter(groups)))
+        self._show_inspector(self.profile_tab)
 
     def _set_results_visible(self, visible):
         was_hidden = self.results_panel.isHidden()
@@ -407,8 +463,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _set_drawing_only(self, enabled):
         self._drawing_only = enabled
         self.focus_button.setChecked(enabled)
-        for panel in (self.navigator, self.task_host, self.ribbon):
-            panel.setVisible(not enabled)
+        self.navigator.setVisible(not enabled)
+        self.task_host.setVisible(not enabled and not self._inspector_collapsed)
+        self.inspector_toggle.setEnabled(not enabled)
         self.results_button.setEnabled(not enabled)
         self.results_panel.setVisible(self.results_button.isChecked() and not enabled)
 
@@ -460,8 +517,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.cad_notice=QLabel('Edição CAD avançada cria modelo explícito.\n'
             'Voltar ao paramétrico descarta a geometria manual, após confirmação.')
         self.cad_notice.setWordWrap(True);col.addWidget(self.cad_notice)
-        self.revert_button=QPushButton(action_icon('undo'), 'Voltar ao modo paramétrico')
-        self.revert_button.clicked.connect(self.revert_parametric);col.addWidget(self.revert_button)
+        self.revert_button=_button('Voltar ao modo paramétrico', self.revert_parametric, 'undo')
+        col.addWidget(self.revert_button, 0, Qt.AlignmentFlag.AlignLeft)
         col.addStretch(1);self._add_inspector_page(tab,'Geometria')
 
     def _build_property_tab(self):
@@ -475,16 +532,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         f.addRow('X (mm)',self.node_x);f.addRow('Y (mm)',self.node_y)
         self.support_x=QCheckBox('Restringir UX');self.support_y=QCheckBox('Restringir UY')
         f.addRow('Apoio',self.support_x);f.addRow('',self.support_y)
-        self.apply_node=QPushButton(action_icon('check'), 'Aplicar posição e apoios');self.apply_node.clicked.connect(self.apply_node_properties)
-        f.addRow(self.apply_node);col.addWidget(g)
+        self.apply_node=_button('Aplicar posição e apoios', self.apply_node_properties, 'check')
+        f.addRow('Aplicar ao nó', self.apply_node);col.addWidget(g)
         g2=QGroupBox('Propriedades das barras');ff=QFormLayout(g2)
         self.member_properties = g2
         self.member_info=QLabel('Selecione uma barra');self.member_info.setWordWrap(True)
         ff.addRow(self.member_info)
         self.group=QComboBox();self.group.addItems(['superior','inferior','montante','diagonal'])
         ff.addRow('Grupo',self.group)
-        change=QPushButton(action_icon('check'), 'Aplicar grupo às barras selecionadas');change.clicked.connect(self.change_group)
-        ff.addRow(change);col.addWidget(g2)
+        change=_button('Aplicar grupo às barras selecionadas', self.change_group, 'check')
+        ff.addRow('Aplicar às barras', change);col.addWidget(g2)
         col.addStretch(1);self._add_inspector_page(tab,'Propriedades')
 
     def _build_loads_tab(self):
@@ -492,11 +549,11 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         col = QVBoxLayout(self.loads_tab)
         row = QHBoxLayout()
         self.load_case = QComboBox()
-        self.load_case.setPlaceholderText('Escolher caso nodal')
-        self.load_case.setAccessibleName('Caso nodal para edição')
+        self.load_case.setPlaceholderText('Escolher padrão nodal')
+        self.load_case.setAccessibleName('Padrão nodal para edição')
         self.load_case.currentTextChanged.connect(self._load_case_changed)
         row.addWidget(self.load_case, 1)
-        row.addWidget(_button('Novo caso', self.add_case, 'add'))
+        row.addWidget(_button('Novo padrão nodal', self.add_case, 'add'))
         col.addLayout(row)
 
         nodal = QGroupBox('Força por nó')
@@ -589,6 +646,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def set_3d_visible(self, visible):
         self.mode_3d.setChecked(visible)
+        self.view_mode_label.setText('3D' if visible else '2D')
         if visible:
             if self._view3d is None:
                 self._view3d = Truss3DView(self.session, self.case_id, self)
@@ -597,8 +655,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 self.setup_task_tree()
             self.canvas_stack.setCurrentWidget(self._view3d)
             self._sync_view3d()
-            self._show_inspector(self._view3d.controls)
-            self.status('Arraste para orbitar · botão central desloca · clique direito inspeciona a barra')
+            self.info_tabs.setCurrentWidget(self._inspector_pages[self._view3d.controls])
+            self.status('Arraste para orbitar · botão central desloca · clique para inspecionar a barra')
         else:
             self.canvas_stack.setCurrentWidget(self.view)
             if self._view3d and self.info_tabs.currentWidget() == self._inspector_pages[self._view3d.controls]:
@@ -610,6 +668,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.grid.setEnabled(not visible)
         self.forces_button.setEnabled(not visible)
         self.force_bar.setVisible(self.view.show_forces and not visible)
+        self._sync_context_tabs()
+        self._refresh_property_summary()
 
     def _sync_view3d(self, *, fit=False):
         if self._view3d is not None and self.mode_3d.isChecked():
@@ -655,7 +715,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             nodes_root.setExpanded(False);members_root.setExpanded(False);drafts_root.setExpanded(True)
             self.tree.blockSignals(False)
             self.filter_model_tree(self.model_filter.text())
-            options=[x['id'] for x in project.get('load_cases',[])]+[x['id'] for x in project.get('combinations',[])]
+            options = [row['id'] for key in ('load_cases', 'combinations', 'load_patterns')
+                       for row in project.get(key, [])]
             previous=self.case_id
             self.cases.blockSignals(True);self.cases.clear();self.cases.addItems(options)
             self.case_id=previous if previous in options else next(iter(options),None)
@@ -738,8 +799,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _update_selection(self, selected, *, show_properties=True):
         self._selected=selected
         if self._nodal_editor_active():
-            self._follow_load_selection()
-            show_properties = False
+            if not selected or self._selected_load_nodes():
+                self._follow_load_selection()
+                show_properties = False
         with QSignalBlocker(self.tree):
             self.tree.clearSelection()
             for key in selected:
@@ -751,6 +813,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 if item is not None and not item.isHidden() and not item.parent().isHidden():
                     self.tree.scrollToItem(item)
         self._show_selection_controls()
+        self._refresh_property_summary()
+        self._sync_context_tabs()
         if not selected:
             self.selection_label.setText('Selecione um nó ou uma barra no desenho ou na árvore.')
             self.member_info.clear()
@@ -775,11 +839,58 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 if show_properties:self.info_tabs.setCurrentIndex(1)
 
     def _show_selection_controls(self):
-        kind = self._selected[0][0] if self._selected else None
-        self.node_properties.setVisible(kind == 'node')
-        self.member_properties.setVisible(kind == 'member' or self.view.tool == 'bar')
-        if kind != 'member':
+        kinds = {kind for kind, _ in self._selected}
+        self.node_properties.setVisible(kinds == {'node'} and len(self._selected) == 1)
+        self.member_properties.setVisible('member' in kinds or self.view.tool == 'bar')
+        if 'member' not in kinds:
             self.member_info.clear()
+
+    def _refresh_property_summary(self):
+        model = self.session.model
+        selected = self._selected
+        if self.mode_3d.isChecked() and self._view3d:
+            member = self._view3d._selected_member
+            selected = [('member', member)] if member else []
+        table = self.property_summary
+        table.clear()
+
+        def group(title, values):
+            parent = QTreeWidgetItem(table, [title])
+            parent.setFirstColumnSpanned(True)
+            font = parent.font(0)
+            font.setBold(True)
+            parent.setFont(0, font)
+            for key, value in values:
+                row = QTreeWidgetItem(parent, [key, str(value)])
+                row.setToolTip(1, str(value))
+            parent.setExpanded(True)
+
+        if len(selected) == 1:
+            kind, identifier = selected[0]
+            if kind == 'node':
+                node = model.node_map().get(identifier)
+                if node is not None:
+                    ux, uy = model.supports.get(identifier, (False, False))
+                    axes = ', '.join(axis for axis, active in [('UX', ux), ('UY', uy)] if active)
+                    group('Nó selecionado', [('ID', identifier), ('X', f'{node.x:,.2f} mm'),
+                                            ('Y', f'{node.y:,.2f} mm'), ('Apoio', axes or 'Livre')])
+                else:
+                    draft = next((row for row in self.session.project.get('cad_drafts', [])
+                                  if row['id'] == identifier), None)
+                    if draft:
+                        group('Nó provisório', [('ID', identifier), ('X', f'{draft["x_mm"]:,.2f} mm'),
+                                                ('Y', f'{draft["y_mm"]:,.2f} mm')])
+            else:
+                member = next((item for item in model.members if item.id == identifier), None)
+                if member:
+                    group('Barra selecionada', [('ID', identifier), ('Nós', f'{member.i} → {member.j}'),
+                          ('Grupo', member.group), ('Perfil', member.profile),
+                          ('Comprimento', f'{model.member_length(member):,.2f} mm')])
+        elif selected:
+            groups = [kind for kind, _ in selected]
+            group('Seleção', [('Nós', groups.count('node')), ('Barras', groups.count('member'))])
+        group('Modelo', [('Nós', len(model.nodes)), ('Barras', len(model.members)),
+                        ('Apoios', len(model.supports))])
 
     def create_node(self,x,y):
         try:p,nid=editing.add_draft(self.session.project,self.session.model,x,y)
@@ -847,17 +958,14 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         p['stability']={};self._apply(p,'Modo paramétrico restaurado',fit=True)
 
     def add_case(self):
-        name,ok=QInputDialog.getText(self,'Caso nodal','Identificador, sem espaços:')
+        name,ok=QInputDialog.getText(self,'Padrão nodal','Identificador, sem espaços:')
         if not ok:return
         try:
-            p=deepcopy(self.session.project)
-            if not name or len(name)>32 or not name.replace('_','').isalnum():raise ValueError('ID inválido')
-            if name in [x['id'] for x in p['load_cases']]:raise ValueError('ID já existe')
-            p['load_cases'].append({'id':name,'name':name,'kind':'nodal','loads':[]})
-        except Exception as exc:QMessageBox.warning(self,'Caso nodal',str(exc));return
-        if self._apply(p,'Caso de carga adicionado'):
+            p = workflow.add_load_case(self.session.project, name, 'nodal', pattern_only=True)
+        except ValueError as exc:QMessageBox.warning(self,'Padrão nodal',str(exc));return
+        if self._apply(p,'Padrão nodal adicionado'):
             self.open_nodal_loads()
-            self.load_case.setCurrentText(name)
+            self.load_case.setCurrentText(name.strip())
 
 
     def open_nodal_loads(self):
@@ -920,16 +1028,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         case = self.load_case.currentText()
         editing_row = self.load_table.currentRow() >= 0
         has_force = bool(self.fx.value() or self.fy.value())
-        self.commit_load.setText('Salvar edição' if editing_row else 'Adicionar')
+        self.commit_load.set_label('Salvar edição da parcela' if editing_row else 'Adicionar parcela')
         self.commit_load.setEnabled(bool(case and self.load_node.currentText() and (has_force or editing_row)))
         self.delete_load.setEnabled(editing_row)
         self.new_load.setEnabled(editing_row)
         count = len(self._selected_load_nodes())
-        self.batch_load.setText(f'Aplicar a {count} nós selecionados' if count > 1
-                                else 'Aplicar aos nós selecionados')
+        self.batch_load.set_label(f'Aplicar a {count} nós selecionados' if count > 1
+                                  else 'Aplicar aos nós selecionados')
         self.batch_load.setEnabled(bool(case and count > 1 and has_force and not editing_row))
         if not case:
-            note = 'Crie um caso nodal para começar.'
+            note = 'Crie um padrão nodal para começar.'
         elif editing_row:
             note = f'Editando a parcela {self.load_table.currentRow() + 1}.'
         else:
@@ -993,7 +1101,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if row < 0:
             return
         updated = deepcopy(self.session.project)
-        case = next((entry for entry in updated['load_cases'] if entry['id'] == cid), None)
+        case = next((entry for entry in load_patterns(updated) if entry['id'] == cid), None)
         if case and row < len(case.get('loads', [])):
             case['loads'].pop(row)
             self._apply(updated, 'Carga removida')
@@ -1174,7 +1282,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         groups={
             'Concepção':('Geometria','Telha / modulação','Perfis'),
             'Modelagem':('Propriedades','Estabilidade'),
-            'Ações':('Cargas nodais','Ações gerais','Combinações'),
+            'Ações':('Padrões','Casos','Combinações','Cargas nodais'),
             'Análise':('Resultados','Alternativas','Diagnóstico','Inspeção 3D'),
         }
         assigned=set()
@@ -1208,11 +1316,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             elif self.info_tabs.widget(index) is self._inspector_pages[self.actions_tab]:
                 self.open_general_actions()
             else:
-                self.info_tabs.setCurrentIndex(index)
+                self._open_inspector_index(index)
 
     def update_task_selection(self,index):
-        if index >= 0:
-            self.inspector_title.setText(self.info_tabs.tabText(index))
+        self._sync_context_tabs()
         if not hasattr(self,'task_tree'):return
         target=getattr(self,'_task_by_index',{}).get(index)
         if target is None:return

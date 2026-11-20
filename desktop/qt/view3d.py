@@ -14,16 +14,16 @@ from html import escape
 from PySide6.QtCore import Qt,QPointF,QRectF,QSignalBlocker,QTimer
 from PySide6.QtGui import QColor,QBrush,QPen,QPolygonF,QPainter,QFont
 from PySide6.QtWidgets import (
-    QVBoxLayout,QHBoxLayout,QLabel,QGraphicsScene,QGraphicsView,
+    QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QGraphicsScene,QGraphicsView,
     QGraphicsPolygonItem,QGraphicsEllipseItem,QGraphicsItem,QComboBox,
-    QPushButton,QColorDialog,QSlider,QCheckBox,QFormLayout,QWidget,
+    QColorDialog,QSlider,QCheckBox,QFormLayout,QWidget,QToolButton,QMenu,
     QTabWidget,QDoubleSpinBox,QGroupBox,QMessageBox,QFileDialog,
 )
 from desktop.preview3d import Camera, camera_projection, color_key,palette_keys
 from desktop.section_mesh import load_shape_catalog,make_model_meshes,make_section_layout,export_obj,display_scaled_vertices
 from desktop.bridge import CATALOG
 from poe_truss.model import GROUPS
-from .action_icons import action_icon
+from .action_icons import IconButton
 from .profile_picker import ProfilePicker
 
 DEFAULT={
@@ -32,6 +32,85 @@ DEFAULT={
     'Compressão':'#2666B8','Nulo / não calculado':'#96A7B6',
 }
 CYCLE=['#1379A5','#D38440','#4E9182','#9A65A8','#D25962','#748AA9']
+PRESETS = {
+    'Isométrica': (30, 25), 'Frontal XY': (0, 0), 'Direita YZ': (90, 0),
+    'Posterior XY': (180, 0), 'Esquerda YZ': (270, 0), 'Superior XZ': (0, 90),
+    'Inferior XZ': (0, -90),
+}
+
+
+class OrientationCube(QWidget):
+    """Miniatura da câmera com faces que abrem vistas ortogonais."""
+
+    def __init__(self, change_view):
+        super().__init__()
+        self.setFixedSize(82, 78)
+        self.setMouseTracking(True)
+        self.setAccessibleName('Cubo de orientação 3D')
+        self.change_view = change_view
+        self.faces = {}
+        self.hovered = None
+
+    def orient(self, yaw, elevation):
+        project = camera_projection(Camera(yaw, elevation))
+        self.faces.clear()
+        faces = (
+            ('Frontal XY', 'Frente', 2, 1), ('Posterior XY', 'Atrás', 2, -1),
+            ('Direita YZ', 'Dir.', 0, 1), ('Esquerda YZ', 'Esq.', 0, -1),
+            ('Superior XZ', 'Topo', 1, 1), ('Inferior XZ', 'Base', 1, -1),
+        )
+        for label, caption, axis, sign in faces:
+            normal = [0, 0, 0]
+            normal[axis] = sign
+            if project(normal)[2] < .015:
+                continue
+            sides = [dim for dim in (0, 1, 2) if dim != axis]
+            vertices = []
+            for a, b in ((-1, -1), (-1, 1), (1, 1), (1, -1)):
+                vertex = normal.copy()
+                vertex[sides[0]], vertex[sides[1]] = a, b
+                x, y, _ = project(vertex)
+                vertices.append(QPointF(41 + 23 * x, 39 + 23 * y))
+            self.faces[label] = (QPolygonF(vertices), caption, axis)
+        self.update()
+
+    def paintEvent(self, event):
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            font = QFont('Segoe UI', 8)
+            painter.setFont(font)
+            for name, (polygon, caption, axis) in self.faces.items():
+                color = '#BFE7FF' if name == self.hovered else ('#C3D9EA', '#EDF6FC', '#D5E6F2')[axis]
+                painter.setBrush(QColor(color))
+                painter.setPen(QPen(QColor('#416781'), 1))
+                painter.drawPolygon(polygon)
+                center = QPointF(sum(point.x() for point in polygon) / 4,
+                                 sum(point.y() for point in polygon) / 4)
+                if polygon.boundingRect().width() > (18 if axis == 0 else 24) and polygon.boundingRect().height() > 18:
+                    painter.drawText(QRectF(center.x() - 23, center.y() - 9, 46, 18),
+                                     Qt.AlignmentFlag.AlignCenter, caption)
+
+    def _face_at(self, point):
+        return next((name for name, (polygon, _, _) in self.faces.items()
+                     if polygon.containsPoint(point, Qt.FillRule.OddEvenFill)), None)
+
+    def mouseMoveEvent(self, event):
+        self.hovered = self._face_at(event.position())
+        self.setToolTip(self.hovered or '')
+        self.setCursor(Qt.CursorShape.PointingHandCursor if self.hovered else Qt.CursorShape.ArrowCursor)
+        self.update()
+
+    def leaveEvent(self, event):
+        self.hovered = None
+        self.update()
+        super().leaveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        face = self._face_at(event.position())
+        if face and event.button() == Qt.MouseButton.LeftButton:
+            self.change_view(face)
+            return
+        super().mouseReleaseEvent(event)
 
 
 class MeshLayer(QGraphicsItem):
@@ -80,6 +159,7 @@ class OrbitView(QGraphicsView):
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self._previous=None
         self._drag_button = None
+        self._dragged = False
         self.setStyleSheet('border:1px solid #D6E1EC;border-radius:3px;')
     def wheelEvent(self,e):
         f=1.12 if e.angleDelta().y()>0 else 1/1.12
@@ -87,6 +167,7 @@ class OrbitView(QGraphicsView):
     def mousePressEvent(self,e):
         if e.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
             self._drag_button = e.button()
+            self._dragged = False
             self._previous=e.position();self.setCursor(Qt.CursorShape.ClosedHandCursor)
             e.accept();return
         if e.button()==Qt.MouseButton.RightButton:
@@ -102,6 +183,7 @@ class OrbitView(QGraphicsView):
     def mouseMoveEvent(self,e):
         if self._previous is not None:
             current=e.position();dx=current.x()-self._previous.x();dy=current.y()-self._previous.y()
+            self._dragged = self._dragged or bool(dx or dy)
             self._previous=current
             if self._drag_button == Qt.MouseButton.MiddleButton:
                 horizontal, vertical = self.horizontalScrollBar(), self.verticalScrollBar()
@@ -113,6 +195,9 @@ class OrbitView(QGraphicsView):
         super().mouseMoveEvent(e)
     def mouseReleaseEvent(self,e):
         if self._drag_button == e.button():
+            if e.button() == Qt.MouseButton.LeftButton and not self._dragged:
+                mid = self.dialog.mesh_layer.member_at(self.mapToScene(e.position().toPoint()))
+                self.dialog.select_member(mid)
             self._previous = self._drag_button = None
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         super().mouseReleaseEvent(e)
@@ -134,24 +219,36 @@ class Truss3DView(QWidget):
         self._orbit_update.setInterval(16);self._orbit_update.timeout.connect(self.redraw)
         root=QVBoxLayout(self);root.setSpacing(4)
         root.setContentsMargins(4, 4, 4, 4)
-        heading=QHBoxLayout()
-        self.preset=QComboBox();self.preset.addItems(['Isométrica','Frontal XY','Perfil lateral','Superior'])
-        self.preset.currentTextChanged.connect(self.set_preset)
-        heading.addWidget(QLabel('Vista'));heading.addWidget(self.preset)
-        exporter=QPushButton(action_icon('export'), 'Exportar OBJ');exporter.clicked.connect(self.save_obj)
-        exporter.setToolTip('Exporta os perfis extrudados em mm para auditoria geométrica externa')
-        heading.addWidget(exporter)
-        heading.addStretch()
-        controls_button = QPushButton(action_icon('panel'), 'Painel 3D')
-        controls_button.clicked.connect(lambda: self._app._show_inspector(self.controls))
-        heading.addWidget(controls_button)
-        root.addLayout(heading)
-
         self.view = OrbitView(self)
         self.mesh_layer = MeshLayer()
         self.view.scene().addItem(self.mesh_layer)
         self._overlays = []
-        root.addWidget(self.view, 1)
+        canvas = QGridLayout()
+        canvas.setContentsMargins(0, 0, 0, 0)
+        canvas.addWidget(self.view, 0, 0)
+        navigation = QWidget()
+        tools = QVBoxLayout(navigation)
+        tools.setContentsMargins(6, 4, 6, 0)
+        tools.setSpacing(0)
+        self.cube = OrientationCube(self.set_preset)
+        self.cube.orient(*self._angles)
+        tools.addWidget(self.cube)
+        home = IconButton('Vista isométrica', lambda: self.set_preset('Isométrica'), 'home')
+        views = IconButton('Todas as vistas predefinidas', lambda: None, 'more')
+        menu = QMenu(views)
+        for label in PRESETS:
+            menu.addAction(label, lambda checked=False, name=label: self.set_preset(name))
+        views.setMenu(menu)
+        views.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(2)
+        buttons.addStretch()
+        buttons.addWidget(home)
+        buttons.addWidget(views)
+        buttons.addStretch()
+        tools.addLayout(buttons)
+        canvas.addWidget(navigation, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        root.addLayout(canvas, 1)
         self.controls = QWidget()
         pcol = QVBoxLayout(self.controls)
         pcol.setContentsMargins(4, 0, 2, 0)
@@ -159,14 +256,18 @@ class Truss3DView(QWidget):
 
         # Página de visualização.
         colors_page=QWidget();f=QFormLayout(colors_page)
+        self.preset = QComboBox()
+        self.preset.addItems(PRESETS)
+        self.preset.currentTextChanged.connect(self.set_preset)
+        f.addRow('Vista', self.preset)
+        f.addRow('Exportar OBJ', IconButton('Exportar perfis extrudados em mm', self.save_obj, 'export'))
         self.mode=QComboBox()
         for label,id in [('Grupo estrutural','group'),('Família de perfil','family'),('Esforço normal','force')]:
             self.mode.addItem(label,id)
         self.mode.currentIndexChanged.connect(self.reset_keys)
         f.addRow('Cores por',self.mode)
         self.category=QComboBox();f.addRow('Categoria',self.category)
-        change_color=QPushButton(action_icon('color'), 'Escolher cor');change_color.clicked.connect(self.choose_color)
-        f.addRow(change_color)
+        f.addRow('Cor', IconButton('Escolher cor', self.choose_color, 'color'))
         self.show_nodes=QCheckBox('Mostrar nós');self.show_nodes.setChecked(False)
         self.show_nodes.toggled.connect(self.redraw);f.addRow(self.show_nodes)
         self.show_edges=QCheckBox('Contornos das faces');self.show_edges.setChecked(True)
@@ -181,7 +282,7 @@ class Truss3DView(QWidget):
         self.show_axes=QCheckBox('Eixos analíticos');self.show_axes.setChecked(False)
         self.show_axes.toggled.connect(self.redraw);f.addRow(self.show_axes)
         self.yaw=QSlider(Qt.Orientation.Horizontal);self.yaw.setRange(0,360);self.yaw.setValue(30)
-        self.elevation=QSlider(Qt.Orientation.Horizontal);self.elevation.setRange(-85,85);self.elevation.setValue(25)
+        self.elevation=QSlider(Qt.Orientation.Horizontal);self.elevation.setRange(-90,90);self.elevation.setValue(25)
         f.addRow('Giro',self.yaw);f.addRow('Elevação',self.elevation)
         for slider in (self.yaw,self.elevation):slider.valueChanged.connect(self._read_angles)
         self.legend=QLabel();self.legend.setWordWrap(True)
@@ -226,7 +327,7 @@ class Truss3DView(QWidget):
         self.pages.setCurrentWidget(geom_page)
 
         info=QGroupBox('ELEMENTO INSPECIONADO');info_box=QVBoxLayout(info)
-        self.selected_label=QLabel('Clique direito sobre uma barra para inspecionar.')
+        self.selected_label=QLabel('Clique sobre uma barra para inspecionar.')
         self.selected_label.setWordWrap(True);info_box.addWidget(self.selected_label)
         pcol.addWidget(info)
         self.issue=QLabel('');self.issue.setWordWrap(True);self.issue.setStyleSheet('color:#995F24;font-size:9pt;')
@@ -289,17 +390,23 @@ class Truss3DView(QWidget):
 
     def _read_angles(self, *_):
         self._angles = (float(self.yaw.value()), float(self.elevation.value()))
+        self.cube.orient(*self._angles)
+        with QSignalBlocker(self.preset):
+            self.preset.setCurrentIndex(-1)
         self.schedule_redraw()
 
     def orbit(self, dx, dy):
         yaw, elevation = self._angles
         yaw = (yaw + dx * 0.55) % 360
-        elevation = max(-85, min(85, elevation - dy * 0.5))
+        elevation = max(-90, min(90, elevation - dy * 0.5))
         self._set_angles(yaw, elevation)
+        with QSignalBlocker(self.preset):
+            self.preset.setCurrentIndex(-1)
         self.schedule_redraw()
 
     def _set_angles(self, yaw, elevation):
         self._angles = (yaw, elevation)
+        self.cube.orient(yaw, elevation)
         with QSignalBlocker(self.yaw), QSignalBlocker(self.elevation):
             self.yaw.setValue(round(yaw))
             self.elevation.setValue(round(elevation))
@@ -327,10 +434,10 @@ class Truss3DView(QWidget):
             QMessageBox.warning(self,'Arranjo não aplicado',str(exc));return
 
     def set_preset(self,label):
-        angles={'Isométrica':(30,25),'Frontal XY':(0,0),
-                'Perfil lateral':(90,0),'Superior':(0,80)}
-        if label not in angles:return
-        self._set_angles(*angles[label])
+        if label not in PRESETS:return
+        with QSignalBlocker(self.preset):
+            self.preset.setCurrentText(label)
+        self._set_angles(*PRESETS[label])
         self.redraw();self.fit()
 
     def refresh_model(self, session, case_id, *, fit=False):
@@ -390,14 +497,16 @@ class Truss3DView(QWidget):
         if self._selected_member:
             member = self._members[mid]
             self.group.setCurrentText(member.group)
-            self.redraw()
+        self.redraw()
+        if self._app is not None:
+            self._app._refresh_property_summary()
 
     def inspect_member(self,mid):
         self._selected_member=mid
         m = self._members.get(mid)
         if not m:
             self._selected_member = None
-            self.selected_label.setText('Clique direito sobre uma barra para inspecionar.')
+            self.selected_label.setText('Clique sobre uma barra para inspecionar.')
             return
         meta=self._member_meta.get(mid,{})
         n=self.axial().get(mid)

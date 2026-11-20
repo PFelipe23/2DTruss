@@ -146,6 +146,45 @@ def merge_forces(factors:dict[str,float],loads:dict[str,dict[str,tuple[float,flo
     return {k:tuple(v) for k,v in combined.items()}
 
 
+def load_patterns(project):
+    """Padrões explícitos e carregamentos legados que também são casos."""
+    return [*project.get('load_patterns', []),
+            *(case for case in project.get('load_cases', []) if case.get('kind') != 'static')]
+
+
+def resolve_case_loads(model, case, patterns, *, preview=False, cache=None):
+    """Aplica padrões ao caso estático linear antes da análise."""
+    if case['kind'] != 'static':
+        if preview and case['kind'] == 'nodal' and not case.get('loads'):
+            return {node.id: (0., 0.) for node in model.nodes}, {}
+        return build_case_loads(model, case)
+    factors = case.get('patterns', {})
+    if not factors:
+        raise ValueError(f'Caso {case["id"]}: informe ao menos um padrão')
+    cache = {} if cache is None else cache
+    for key in factors:
+        if key not in patterns or patterns[key].get('kind') == 'static':
+            raise ValueError(f'Caso {case["id"]}: padrão inexistente {key}')
+        if key not in cache:
+            cache[key] = resolve_case_loads(model, patterns[key], patterns, preview=preview)
+    raw = {key: cache[key][0] for key in factors}
+    forces = merge_forces(factors, raw)
+    entries = []
+    for key, factor in factors.items():
+        for parcel in cache[key][1].get('entries', []):
+            entry = dict(parcel, case_id=case['id'], pattern_id=key, factor=float(factor))
+            for field in ('fx_n', 'fy_n', 'moment_origin_nmm'):
+                entry[field] *= float(factor)
+            entries.append(entry)
+    return forces, {
+        'case_id': case['id'], 'kind': 'static', 'patterns': dict(factors),
+        'entries': entries, 'n_entries': len(entries),
+        'sum_fx_n': sum(fx for fx, _ in forces.values()),
+        'sum_fy_n': sum(fy for _, fy in forces.values()),
+        'sum_m_origin_nmm': sum(row['moment_origin_nmm'] for row in entries),
+    }
+
+
 def combination_audit(combo_id:str,factors:dict[str,float],raw:dict[str,dict[str,tuple[float,float]]]):
     merged=merge_forces(factors,raw)
     entries=[]

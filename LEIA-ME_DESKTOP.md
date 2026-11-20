@@ -1,6 +1,6 @@
 # 2DTruss v0.1 — Desktop PySide6
 
-**Aplicação nativa sem navegador**: `2DTruss.pyw` abre `QMainWindow` / `QGraphicsView`, com ribbon e painéis de navegação. O solver de treliça plana permanece em `poe_truss/solver.py`.
+**Aplicação nativa sem navegador**. `2DTruss.pyw` abre a área de trabalho com barra de ícones e painéis de navegação. O solver de treliça plana permanece em `poe_truss/solver.py`.
 
 ## Execução no Windows, sem privilégios administrativos
 
@@ -28,7 +28,7 @@ Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2D
 
 ## Interface e atalhos
 
-- Ribbon: Arquivo, Modelagem, Ações, Análise e Exibição, incluindo comando Vista 3D.
+- Barra única de ícones para arquivo, modelagem, cargas, exibição e cálculo. Passe o mouse por 500 ms para identificar um comando. **Mais comandos** abre importação, exportação e outras ferramentas.
 - Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), caixa de seleção, zoom pela roda, ferramenta pan, ajuste da vista, escala vertical exclusivamente visual.
 - **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade de 50 mm. A posição só é aplicada ao modelo após soltar o mouse.
 - **Novo nó**: clique cria um *rascunho* de nó; ele passa ao modelo estrutural quando uma barra válida o conecta à malha existente. Isso impede nós isolados no solver.
@@ -36,7 +36,7 @@ Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2D
 - **Subdividir**: clique uma barra; cria nó intermediário e duas barras, preservando o comprimento e a área. A barra original deixa de existir e novos IDs são emitidos sem reciclagem.
 - **Excluir**: barra ou nó selecionado, com remoção das barras incidentes e cargas nodais órfãs. Se o resultado não for um modelo geométrico válido, a edição é recusada.
 - Propriedades: edição X/Y, suporte UX/UY, grupo e perfil por grupo.
-- Cargas: nova carga nodal, tabela por caso, Fx/Fy em kgf/tf/kN/N. A aba **Ações gerais** agora permite editar casos de carga de área, linha, peso próprio e vento com intensidade, direção, zona e base de comprimento; o motor distribui as resultantes aos nós. Os valores de pressão e coeficientes são sempre fornecidos pelo projetista.
+- Cargas nodais em kgf, tf, kN ou N. Padrões distribuídos usam intensidade, direção, zona e base de comprimento para obter as resultantes nodais.
 - Resultados: esforços por caso/combinação, modos de envoltória (tração e compressão), pesquisa de dez barras críticas, exportação CSV DimPerfil e memorial HTML A3.
 - `F5` calcula. `Ctrl+S`, `Ctrl+O`, `Ctrl+Z`, `Ctrl+Y` e `Delete` disponibilizam comandos convencionais.
 
@@ -44,7 +44,7 @@ Todas as edições estruturais invalidam os resultados anteriores. Não há um s
 
 ## Importação DXF / DWG
 
-**Arquivo > Importar DXF/DWG**:
+Abra **Mais comandos → Importar DXF/DWG**.
 
 1. Escolha arquivo; se DXF não tiver `$INSUNITS`, informe a unidade manualmente (mm, cm, m ou polegada).
 2. Informe tolerância de união dos nós (valor inicial 1 mm).
@@ -64,11 +64,13 @@ Todas as edições estruturais invalidam os resultados anteriores. Não há um s
 - `desktop/editing.py` — comandos imutáveis para edição topológica, geometria e IDs.
 - `desktop/cad_io.py` — leitura controlada de CAD e aprovação para modelo explícito.
 - `desktop/qt/viewport.py` — QGraphicsView e eventos do desenho.
-- `desktop/qt/app.py` — ribbon, painéis de propriedades, cargas e resultados.
+- `desktop/qt/app.py` — barra de ícones, painéis de propriedades, cargas e resultados.
 - `desktop/app.py` — interface Tkinter legado preservada apenas para compatibilidade e comparação histórica; **não é o launcher atual**.
 - `tests/test_cad_editing_pyside.py` — testes automáticos CAD/edição, sem ambiente gráfico.
 
 O esquema persistente continua **`poe-truss-python/v1`**. Um campo opcional `model_override` registra a malha explícita pós-edição/importação; `cad_drafts` guarda nós provisórios. IDs de nó/barra estáveis são preservados quando possível. Alterações de topologia limpam resistências externas potencialmente vencidas e exigem reconfirmação dos travamentos.
+
+`load_patterns` guarda novos padrões independentes. Cada caso explícito em `load_cases` usa `kind: "static"` e um mapa `patterns` de fatores por padrão. Os carregamentos de arquivos anteriores continuam funcionando como padrões com um caso implícito de fator 1. `combinations` mantém o mapa `factors` por caso.
 
 ## Limitações e evidências
 
@@ -81,27 +83,31 @@ O esquema persistente continua **`poe-truss-python/v1`**. Um campo opcional `mod
 
 A aba **Perfis** altera os perfis por grupo, a quantidade de componentes, a modulação e permite registrar fabricante/modelo e massa superficial de telhas informados pelo usuário. O caso `G2` é atualizado como carga superficial de telha, com convenção `1 kgf = 10 N`. O passo das terças é hipótese geométrica, não capacidade resistente comprovada.
 
-A aba **Combinações** permite criar, excluir e editar fatores assinados por caso; não calcula coeficientes normativos automaticamente. A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções, sem impedir valores manuais fora da pesquisa. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
+A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
 
-### Inserir e conferir cargas em 2D
+### Definir, aplicar e conferir cargas
 
-Em **Ações → Inserir cargas**, escolha ou crie um caso nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a mesma força em vários nós, selecione-os com Ctrl+clique e use **Aplicar a n nós selecionados**. Cada nó recebe uma parcela com os mesmos valores. Clique numa parcela da tabela para editar ou remover essa linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
+1. Em **Padrões**, cadastre as ações e sua natureza. A interface apresenta referências à ABNT NBR 6120 para ações em edificações, à ABNT NBR 6123 para vento e à ABNT NBR 8681 para ações excepcionais.
+2. Em **Casos**, crie um caso estático linear e indique os padrões aplicados e seus fatores.
+3. Em **Combinações**, selecione a classificação ELU ou ELS e informe os fatores assinados dos casos. As intensidades, os coeficientes e o enquadramento normativo são definidos pelo projetista.
 
-**Ações gerais** mostra os campos pertinentes ao tipo do caso. Selecione um caso ou combinação no desenho e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. As setas ficam acima dos nós, ligadas por uma linha pontilhada. Cada seta mantém a direção da força e seu comprimento é relativo à maior força do caso. A faixa mostra a soma de `Fx` e `Fy` em kN. **Valores** distribui as magnitudes acima das setas e omite os rótulos que não couberem. Passe o cursor sobre o nó para ver as componentes.
+Em **Inserir cargas nodais**, escolha ou crie um padrão nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a força, selecione vários nós com Ctrl+clique e use **Aplicar a n nós selecionados**. Clique numa parcela da tabela para editar ou remover a linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
+
+Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A ponta da seta encosta na borda do nó no eixo da força. O comprimento é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` em kN. **Valores** posiciona os rótulos em espaços livres. Passe o cursor sobre a seta ou o nó para ver as componentes.
 
 ## Área de trabalho
 
-A barra superior reúne arquivos, análise e o botão **2D | 3D**. Use as abas da faixa de comandos para criar e editar o modelo, atribuir ações e controlar o que aparece no desenho. À esquerda, **Modelo** filtra nós e barras por ID ou grupo, e **Tarefas** abre as páginas do inspetor à direita.
+À esquerda, **Propriedades** resume o objeto selecionado. **Modelo** filtra nós e barras por ID ou grupo e **Tarefas** abre as ferramentas do editor. À direita, as abas apresentam controles de coordenadas e apoios para nós, cargas nodais para seleção em nós e edição de grupo e perfil para barras. O botão de painel no canto superior direito do desenho recolhe ou expande o editor.
 
-A barra do desenho oferece seleção, movimentação, pan, enquadramento e escolha de caso ou combinação. A barra inferior mostra as coordenadas em milímetros, o estado da análise e os controles independentes de grade e snap. **Exibição → IDs dos nós** liga os identificadores no desenho.
+O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas em milímetros e o estado da análise. Grade, snap e IDs dos nós são controles independentes na barra superior.
 
 `F5` calcula e abre a tabela inferior. Clique numa linha para inspecionar a barra ou use **Detalhar** para consultar filtros e envoltórias. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
 
 ## Perfis, aço e vista 3D
 
-Em **Modelagem → Perfis**, escolha o grupo, a biblioteca e a bitola. A seleção é aplicada ao grupo com quantidade **1**. Aumente a quantidade após escolher a bitola para criar uma seção dupla. Projetos abertos mantêm os perfis e as quantidades gravados.
+Em **Perfis e aço**, escolha o grupo, a biblioteca e a bitola. A seleção é aplicada ao grupo com quantidade **1**. Aumente a quantidade após escolher a bitola para criar uma seção dupla. Projetos abertos mantêm os perfis e as quantidades gravados.
 
-Em **2D | 3D**, a aba **Arranjo** permite editar o mesmo grupo. Um clique direito numa barra seleciona seu grupo no painel. Arraste com o botão esquerdo para girar, use o botão central para deslocar e a roda para aproximar. A troca de bitola, a geometria confirmada no inspetor e os ajustes de arranjo atualizam a vista aberta. Use `F5` para recalcular depois de modificar o projeto.
+Em **2D | 3D**, clique nas faces do cubo para alinhar a vista. Os botões sob o cubo retornam à isométrica ou abrem a lista de seis vistas ortogonais. Clique numa barra para consultar suas propriedades e editar seu grupo em **Arranjo**. Arraste com o botão esquerdo para girar, use o botão central para deslocar e a roda para aproximar. A troca de bitola, a geometria confirmada no inspetor e os ajustes de arranjo atualizam a vista aberta. Use `F5` para recalcular depois de modificar o projeto.
 
 Em **Exibição** no painel 3D, ajuste cor, modo sólido ou aramado e escala de seção. **Exportar OBJ** gera malhas em milímetros e escala real, independentemente do exagero visual. Seções duplas com espaçamento nulo têm uma separação gráfica de 6 mm. O visor ordena faces por profundidade para inspeção visual. Use o OBJ em um visualizador adequado para examinar interseções.
 

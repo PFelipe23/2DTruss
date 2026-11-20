@@ -7,8 +7,8 @@ from math import isfinite
 from poe_truss.catalog import load_catalog
 from poe_truss.engine import run_project
 from poe_truss.model import make_model
-from poe_truss.loads import build_case_loads, merge_forces
-from .workflow import update_nodal_loads
+from poe_truss.loads import load_patterns, merge_forces, resolve_case_loads
+from .workflow import add_load_case, update_nodal_loads
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT = ROOT / 'examples' / 'cobertura_duas_aguas.json'
@@ -85,17 +85,10 @@ class Session:
         self.update_project(p)
 
     def nodal_cases(self):
-        return [x for x in self.project.get('load_cases',[]) if x.get('kind')=='nodal']
+        return [pattern for pattern in load_patterns(self.project) if pattern['kind'] == 'nodal']
 
     def add_nodal_case(self, case_id:str):
-        case_id=case_id.strip()
-        if not case_id or len(case_id)>32 or not case_id.replace('_','').isalnum():
-            raise ValueError('ID do caso deve ser alfanumérico, até 32 caracteres')
-        if case_id in {c['id'] for c in self.project.get('load_cases',[])}:
-            raise ValueError('ID já utilizado')
-        p=deepcopy(self.project)
-        p.setdefault('load_cases',[]).append({'id':case_id,'name':case_id,'kind':'nodal','loads':[]})
-        self.update_project(p)
+        self.update_project(add_load_case(self.project, case_id, 'nodal'))
 
     def set_nodal_load(self, case_id:str, node_id:str, fx:float, fy:float, force_unit='kgf', index=None):
         self.update_project(update_nodal_loads(
@@ -104,26 +97,28 @@ class Session:
 
     def delete_nodal_load(self,case_id,index:int):
         p=deepcopy(self.project)
-        case=next((x for x in p['load_cases'] if x['id']==case_id and x['kind']=='nodal'),None)
+        case=next((x for x in load_patterns(p) if x['id']==case_id and x['kind']=='nodal'),None)
         if case is None: raise ValueError('Caso nodal inexistente')
         del case['loads'][index]
         self.update_project(p)
 
     def forces_for_case(self, case_id:str):
         cases = {case['id']: case for case in self.project.get('load_cases', [])}
+        patterns = {pattern['id']: pattern for pattern in load_patterns(self.project)}
+        cache = {}
 
         def nodal_forces(case):
-            if case['kind'] == 'nodal' and not case.get('loads'):
-                return {}
-            return build_case_loads(self.model, case)[0]
+            return resolve_case_loads(self.model, case, patterns, preview=True, cache=cache)[0]
 
-        if case_id in cases:
-            return nodal_forces(cases[case_id])
+        source = cases.get(case_id) or patterns.get(case_id)
+        if source is not None:
+            if source['kind'] == 'nodal' and not source.get('loads'):
+                return {}
+            return nodal_forces(source)
         combination = next((entry for entry in self.project.get('combinations', [])
                             if entry['id'] == case_id), None)
         if combination and combination['factors']:
             factors = combination['factors']
-            zeros = {node.id: (0., 0.) for node in self.model.nodes}
-            raw = {key: nodal_forces(cases[key]) or zeros for key in factors if key in cases}
+            raw = {key: nodal_forces(cases[key]) for key in factors if key in cases}
             return merge_forces(factors, raw)
         return {}

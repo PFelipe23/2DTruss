@@ -175,7 +175,12 @@ def make_import_project(project:dict,preview:CadPreview,catalog:dict,layer_group
     p['model_override']={'nodes':deepcopy(preview.nodes),'members':members,'supports':[]}
     p.pop('node_edits',None);p.pop('supports',None);p.pop('cad_drafts',None)
     p['load_cases']=[c for c in p.get('load_cases',[]) if c.get('kind')=='self_weight']
-    if not p['load_cases']:p['load_cases']=[{'id':'G1','name':'Peso próprio das barras','kind':'self_weight'}]
+    p['load_patterns'] = [row for row in p.get('load_patterns', []) if row.get('kind') == 'self_weight']
+    if not p['load_cases']:
+        ident = 'G1'
+        while any(row['id'] == ident for row in p['load_patterns']):
+            ident += '_'
+        p['load_cases']=[{'id':ident,'name':'Peso próprio das barras','kind':'self_weight'}]
     p['combinations']=[]
     p['stability']={}
     p.pop('external_resistances',None)

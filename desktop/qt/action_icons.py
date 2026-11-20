@@ -1,8 +1,9 @@
 """Ícones de linha em uma grade de 16 unidades, desenhados pelo Qt."""
 from functools import lru_cache
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QToolButton, QToolTip
 
 
 # Cada trecho separado por "|" é um traço independente. Os pares são x,y.
@@ -20,6 +21,7 @@ GLYPHS = {
     'group': '2,3 11,3 11,7 2,7 2,3 | 5,9 14,9 14,13 5,13 5,9',
     'profile': '2.5,2.5 13.5,2.5 13.5,4.5 9,4.5 9,11.5 13.5,11.5 13.5,13.5 2.5,13.5 2.5,11.5 7,11.5 7,4.5 2.5,4.5 2.5,2.5',
     'load': '3,2 3,9 | 1.5,7 3,9 4.5,7 | 8,2 8,9 | 6.5,7 8,9 9.5,7 | 13,2 13,9 | 11.5,7 13,9 14.5,7 | 2,13 14,13',
+    'load_view': '1.5,8 5,4 11,4 14.5,8 11,12 5,12 1.5,8 | 8,6 8,10 | 6.5,8.5 8,10 9.5,8.5',
     'add': '8,2.5 8,13.5 | 2.5,8 13.5,8',
     'support': '2,10.5 8,3 14,10.5 2,10.5 | 3,14 5,12.5 | 7,14 9,12.5 | 11,14 13,12.5',
     'actions': '2,4 14,4 | 5,2 5,6 | 2,8 14,8 | 10,6 10,10 | 2,12 14,12 | 7,10 7,14',
@@ -45,7 +47,50 @@ GLYPHS = {
     'panel': '2,3 14,3 14,13 2,13 2,3 | 9,3 9,13 | 11,6 12,6 | 11,9 12,9',
     'check': '2.5,8 6,11.5 13.5,4',
     'color': '8,2 12,7 13,10 11.5,13 8,14 4.5,13 3,10 4,7 8,2 | 5.5,10.5 6.5,12 8,12.5',
+    'case': '3,2 10,2 13,5 13,14 3,14 3,2 | 10,2 10,5 13,5 | 5.5,8 10.5,8 | 5.5,11 10.5,11',
+    'more': '4,8 4.3,8 | 8,8 8.3,8 | 12,8 12.3,8',
+    'collapse': '2,3 14,3 14,13 2,13 2,3 | 9,3 9,13 | 4,6 6,8 4,10',
+    'home': '2,8 8,2 14,8 | 4,7 4,14 7,14 7,10 9,10 9,14 12,14 12,7',
 }
+
+
+class IconButton(QToolButton):
+    hover_delay_ms = 500
+
+    def __init__(self, label, callback, icon, *, checkable=False, light=False):
+        super().__init__()
+        self.set_label(label)
+        self.setCheckable(checkable)
+        self.setIcon(action_icon(icon, light=light))
+        self.setIconSize(QSize(17, 17))
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.clicked.connect(callback)
+        self._hover_timer = QTimer(self, singleShot=True, interval=self.hover_delay_ms,
+                                   timerType=Qt.TimerType.PreciseTimer)
+        self._hover_timer.timeout.connect(self._show_tip)
+
+    def set_label(self, label):
+        self.setText(label)
+        self.setAccessibleName(label)
+        self.setToolTip(label)
+
+    def _show_tip(self):
+        if self.isVisible() and self.underMouse():
+            QToolTip.showText(QCursor.pos(), self.toolTip(), self, self.rect())
+
+    def event(self, event):
+        kind = event.type()
+        timer = getattr(self, '_hover_timer', None)
+        if timer is not None:
+            if kind == QEvent.Type.Enter:
+                timer.start()
+            elif kind in (QEvent.Type.Leave, QEvent.Type.Hide, QEvent.Type.MouseButtonPress):
+                timer.stop()
+                if QToolTip.text() == self.toolTip():
+                    QToolTip.hideText()
+            elif kind == QEvent.Type.ToolTip:
+                return True
+        return super().event(event)
 
 
 @lru_cache(maxsize=None)

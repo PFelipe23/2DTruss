@@ -61,15 +61,15 @@ class MemberItem(QGraphicsLineItem):
 
 
 class ForceVectorItem(QGraphicsPathItem):
-    """Seta proporcional posicionada acima do nó em pixels de tela."""
+    """Seta proporcional que termina no contorno do nó."""
 
     def __init__(self, node, position, fx, fy, maximum):
         magnitude = hypot(fx, fy)
         direction = QPointF(fx / magnitude, -fy / magnitude)
         normal = QPointF(-direction.y(), direction.x())
         length = 50 * magnitude / maximum
-        tail = QPointF()
-        head = direction * length
+        head = direction * -7
+        tail = head - direction * length
         wing = min(7, length * .5)
         base = head - direction * wing
         path = QPainterPath(tail)
@@ -77,9 +77,6 @@ class ForceVectorItem(QGraphicsPathItem):
         path.moveTo(base - normal * wing * .55)
         path.lineTo(head)
         path.lineTo(base + normal * wing * .55)
-        bounds = path.boundingRect()
-        offset = QPointF(-bounds.center().x(), -13 - bounds.bottom())
-        path.translate(offset)
         super().__init__(path)
         self.setPos(position)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -89,11 +86,6 @@ class ForceVectorItem(QGraphicsPathItem):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
         self.setToolTip(f'{node} · Fx {fx/1000:+.3f} kN · Fy {fy/1000:+.3f} kN')
-        anchor = offset + head * .5
-        guide = QGraphicsLineItem(0, -7, anchor.x(), anchor.y(), self)
-        guide.setPen(QPen(QColor('#AC8A69'), 1, Qt.PenStyle.DotLine))
-        guide.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent)
-        guide.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.label = QGraphicsSimpleTextItem(f'{magnitude/1000:.2f} kN', self)
         self.label.setFont(QFont('Segoe UI', 9))
         self.label.setBrush(QBrush(QColor('#895019')))

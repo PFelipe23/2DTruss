@@ -25,6 +25,31 @@ ROOF=json.loads((ROOT/'examples/cobertura_duas_aguas.json').read_text())
 
 
 class AnalyticTests(unittest.TestCase):
+    def test_static_case_and_combination_apply_pattern_factors(self):
+        from desktop.bridge import Session
+        from desktop.workflow import add_combination, update_combination, update_static_case
+
+        project = copy.deepcopy(TRIANGLE)
+        project['load_patterns'] = [{
+            'id': 'Q4', 'kind': 'nodal', 'action_class': 'variable',
+            'loads': [{'node': 'C', 'fy': -4, 'force_unit': 'kN'}],
+        }]
+        project = update_static_case(project, 'Q18', 'Cargas combinadas',
+                                     {'F10': 1, 'Q4': 2}, create=True)
+        project = add_combination(project, 'S9')
+        project = update_combination(project, 'S9', {'Q18': .5}, 'sls_rare')
+        session = Session(project, CATALOG)
+        result = session.calculate()
+        self.assertNotIn('Q4', result['analyses'])
+        self.assertEqual(session.forces_for_case('Q4')['C'], (0., -4000.))
+        self.assertEqual(session.forces_for_case('S9')['C'], (0., -9000.))
+        case = result['analyses']['Q18']
+        self.assertAlmostEqual(case['axial_n']['AC'], -15000.)
+        self.assertAlmostEqual(case['reactions']['A']['fy_n'], 9000.)
+        self.assertAlmostEqual(result['analyses']['S9']['axial_n']['AB'], 6000.)
+        self.assertEqual({row['pattern_id'] for row in result['load_audit']['Q18']['entries']},
+                         {'F10', 'Q4'})
+
     def test_A02_member_forces(self):
         r=run_project(TRIANGLE,CATALOG)['analyses']['F10']['axial_n']
         self.assertAlmostEqual(r['AB']/1000, 6.6666666667, places=8)
