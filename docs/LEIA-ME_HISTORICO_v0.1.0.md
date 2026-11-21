@@ -98,7 +98,7 @@ Consulte `FTool_GUIA.md` e `CODEX_AUDITORIA.md`.
 | `poe_truss/cli.py` | Execução e confrontação numérica, independente da UI |
 | `poe_truss/server.py` | HTTP local, com token e acesso restrito |
 | `tests/` | Testes de cálculo, HTTP e ensaio visual opcional |
-| `verification/` | Pacotes FTool A02/B01/B02 aguardando resultados FTool |
+| `output/verification/ftool/` | Pacotes A02/B01/B02 gerados conforme o [guia do FTool](../FTool_GUIA.md) |
 
 ## 7. Continuidade
 

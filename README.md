@@ -32,9 +32,11 @@ O CI executa os testes de regressão sem dependência de UI gráfica real. Teste
 | `desktop/` | Editor CAD, importação de DXF e preparação para DWG |
 | `tests/` | Testes analíticos e regressão |
 | `examples/` | Projetos e arquivos de teste |
-| `verification/` | Benchmarks e evidências **não homologadas** |
+| `verification/` | Dados fixos dos testes e ferramenta de verificação de malhas |
 | `docs/` | Arquitetura, histórico e limitações |
 | `web/` | Interface web legada, sem uso pelo launcher principal |
+
+Gere resultados, relatórios e malhas localmente em `output/`, que fica fora do controle de versão. Para recriar os pacotes de comparação, siga o [guia do FTool](FTool_GUIA.md).
 
 **Compatibilidade:** o pacote interno `poe_truss` e os esquemas `poe-truss-python/v1` foram preservados para abrir os projetos das versões anteriores. Esse nome interno não representa a marca pública.
 

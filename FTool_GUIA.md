@@ -4,7 +4,17 @@
 
 **Referências analíticas: verificadas por testes automatizados. Resultados numéricos efetivamente produzidos no FTool: PENDENTES.**
 
-Os CSVs foram preparados para reproduzir a geometria e os carregamentos no FTool; **não são arquivos nativos de projeto FTool**. Não confundir saída POE com referência FTool.
+Gere as tabelas de geometria, apoios e carregamentos a partir dos modelos de referência. Os CSVs servem à reprodução manual no FTool. Os resultados exportados vêm do 2DTruss.
+
+Na raiz do repositório, execute:
+
+~~~powershell
+python -m poe_truss.cli ftool examples/FTool_A02_trelica_triangular.json --case F10 --out output/verification/ftool/A02
+python -m poe_truss.cli ftool examples/cobertura_duas_aguas.json --case S_GRAV --out output/verification/ftool/B01
+python -m poe_truss.cli ftool examples/cobertura_duas_aguas.json --case W_UP --out output/verification/ftool/B02
+~~~
+
+Cada pacote inclui um manifesto que registra o modelo e o estado da validação. Preencha as tabelas dentro do pacote de trabalho.
 
 ## Benchmark A02 — triângulo (prioridade obrigatória)
 
@@ -39,7 +49,7 @@ Arquivo `examples/cobertura_duas_aguas.json`; caso `S_GRAV`.
 - Treliça de 16 m, duas águas, altura base 1,10 m e elevação de cumeeira 1,20 m.
 - Área de influência definida por distância entre pórticos de 5 m.
 - Barras por grupo com E=200 GPa, área multiplicada pelas seções duplas.
-- Forças **nodais** no arquivo `verification/FTool_B01_Pratt_cobertura/nodes.csv` (kN).
+- Forças **nodais** no arquivo `output/verification/ftool/B01/nodes.csv` (kN).
 - Apoios no arquivo `supports.json`.
 - Confronte esforços N, reações e deslocamentos nos nós para a combinação selecionada.
 

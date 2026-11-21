@@ -1,7 +1,0 @@
-FTool: reproduza coordenadas e barras dos CSV; configure E = 200000 MPa.
-Modele BARRAS ARTICULADAS e forças nodais fx/fy de nodes.csv.
-Apoios fixados em supports.json (UX/ UY). A tabela apresenta resultados POE, NÃO FTool.
-No FTool, compare forças N em kN (+ tração, - compressão; conferir convenção do FTool),
-reações e deslocamentos em mm. Preencha ftool_comparacao_PREENCHER.csv.
-Para esforços, deslocamentos e reações preencher FTool_CONFRONTO_COMPLETO.csv.
-A comparação numérica deve ser formalizada com `python -m poe_truss.cli compare ...`.

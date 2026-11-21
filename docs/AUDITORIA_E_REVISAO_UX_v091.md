@@ -87,7 +87,7 @@ python -m unittest discover -s tests -q
 python -m coverage run --source=poe_truss -m unittest discover -s tests -q
 python -m coverage report -m
 node --check web/app.js
-python tests/browser_ui_v091_smoke.py  # opcional, requer Playwright/Chromium
+python tests/browser_ui_v09_inmemory.py  # opcional, requer Playwright/Chromium
 ```
 
 Resultados da execução atual: **82/82 testes Python aprovados**, cobertura **89% de linhas** no conjunto de módulos `poe_truss`, `solver.py` com 100% das linhas exercitadas pelos testes. O Chromium foi executado em `page.set_content` com ponte Python para as mesmas funções reais, devido ao bloqueio de navegação loopback pelo ambiente. Foram exercitados: inicialização, alteração ao vivo, nova análise, casos de carga, seleção de tarefas e subtelas. Não ocorreram exceções JavaScript.

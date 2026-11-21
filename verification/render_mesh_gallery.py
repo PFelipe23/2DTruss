@@ -59,11 +59,11 @@ for idx,(key,title,count,config) in enumerate(profiles):
 fig.text(.5,.03,'Extrusão reta de 290 mm por amostra · Sem raios de dobra, variações de espessura de mesa ou ligações · Uso visual, não ELU',
          ha='center',fontsize=9,color='#6D7F8E')
 fig.subplots_adjust(left=.012,right=.988,top=.90,bottom=.06,wspace=.02)
-output=ROOT/'captures'/'POE_Trelica_v09_Perfis_3D_Contornos.png'
+meshdir=ROOT/'output'/'verification'/'meshes'
+output=meshdir/'POE_Trelica_v09_Perfis_3D_Contornos.png'
 output.parent.mkdir(exist_ok=True,parents=True)
 fig.savefig(output,dpi=185,facecolor=fig.get_facecolor())
 print(output)
-meshdir=ROOT/'verification'/'meshes';meshdir.mkdir(exist_ok=True)
 export_obj(all_meshes,meshdir/'amostras_U_UE_L_e_2UE.obj')
 session=Session()
 meshes,warnings,_=make_model_meshes(session.model,session.project,shapes,session.catalog)

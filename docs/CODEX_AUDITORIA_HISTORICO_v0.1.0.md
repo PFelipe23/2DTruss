@@ -38,10 +38,10 @@
 - `poe_truss/search.py`: busca preliminar de geometria e flecha, sem resistência.
 - `poe_truss/migrate.py`: migração assistida de JSON v0.5, sem duplicação silenciosa do peso próprio.
 - `poe_truss/cli.py`: geração e confronto dos benchmarks.
-- `verification/FTool_*`: modelos, forças nodais e templates **sem preenchimento FTool**.
+- Os modelos de referência continuam em `examples/`. O [guia do FTool](../FTool_GUIA.md) gera as tabelas em `output/`.
 - `tests/test_engine.py`: cálculo analítico e regressões.
 - `tests/test_http.py`: servidor local.
-- `tests/browser_smoke.py`: teste opcional de UI com dados reais pré-calculados e fetch simulado, para bancada com Chromium bloqueado.
+- `tests/browser_ui_v09_inmemory.py`: teste opcional de UI com dados reais pré-calculados e fetch simulado, para bancada com Chromium bloqueado.
 
 ## Entregáveis esperados do Codex
 
