@@ -36,10 +36,9 @@ from .result_display import (displacement_resultant, envelope_details, envelope_
 from .viewport import COMP, DEFORMED, DISPLACEMENT_PEAK, GROUP_COLORS, TENS, TrussView
 from .workflow_panels import WorkflowMixin
 from .view3d import Truss3DView
-from .ui_theme import STYLE, WorkspaceCheckBox as QCheckBox, workspace_palette
+from .ui_theme import WorkspaceCheckBox as QCheckBox, apply_workspace_theme, workspace_application
 
 APP_TITLE=f'{APP_NAME} {TAG}'
-STYLESHEET=STYLE
 
 
 def _spin(value,minimum,maximum,decimals=2,step=1):
@@ -113,8 +112,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.setWindowTitle(APP_TITLE)
         self.resize(1320, 700)
         self.setMinimumSize(1000, 560)
-        self.setPalette(workspace_palette())
-        self.setStyleSheet(STYLESHEET)
+        apply_workspace_theme(QApplication.instance())
         self._build()
         if settings is not None:
             self.view.configure_grid(
@@ -203,7 +201,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         strip.addWidget(QLabel('Carregamento'))
         strip.addWidget(self.cases)
         self.forces_button = _button('Cargas', lambda visible: self._set_overlay('show_forces', visible),
-                                     'load_view', checkable=True, light=True)
+                                     'load_view', checkable=True)
         self.results_button = _button('Resultados', self._set_results_visible, 'table', checkable=True)
         self.inspector_toggle = _button('Recolher ou expandir o painel direito',
                                         self._set_inspector_collapsed, 'panel', checkable=True)
@@ -406,7 +404,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         )
         for group in groups:
             for label, command, icon in group:
-                line.addWidget(self._workspace_button(label, command, icon, light=True))
+                line.addWidget(self._workspace_button(label, command, icon))
             line.addSpacing(4)
             divider = QFrame()
             divider.setObjectName('toolDivider')
@@ -414,23 +412,23 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             line.addWidget(divider)
             line.addSpacing(4)
 
-        line.addWidget(self._workspace_button('Identificadores dos nós', 'show_ids', 'node_ids', light=True))
+        line.addWidget(self._workspace_button('Identificadores dos nós', 'show_ids', 'node_ids'))
         line.addWidget(self._build_member_tags_button())
         for label, flag, icon in [
                                   ('Esforços', 'show_efforts', 'force'),
                                   ('Deformada', 'show_deformed', 'deformed'),
                                   ('Reações de apoio', 'show_reactions', 'reaction')]:
-            line.addWidget(self._workspace_button(label, flag, icon, light=True))
+            line.addWidget(self._workspace_button(label, flag, icon))
         self._overlay_buttons['show_forces'] = self.forces_button
         for button, icon in [(self.forces_button, 'load_view'), (self.results_button, 'table'),
                              (self.snap, 'snap'), (self.grid, 'grid')]:
-            button.setIcon(action_icon(icon, light=True))
+            button.setIcon(action_icon(icon))
             line.addWidget(button)
         self.focus_button = _button('Só desenho (Ctrl+0)', self._set_drawing_only,
-                                    'focus', checkable=True, light=True)
+                                    'focus', checkable=True)
         line.addWidget(self.focus_button)
 
-        more = _button('Mais comandos', lambda: None, 'more', light=True)
+        more = _button('Mais comandos', lambda: None, 'more')
         menu = QMenu(more)
         for label, command, icon in [
             ('Importar DXF / DWG', self.import_cad, 'import'),
@@ -448,20 +446,20 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         line.addWidget(more)
         line.addStretch(1)
-        self.unit_button = _button('Unidades de exibição', self.open_units, 'units', light=True)
+        self.unit_button = _button('Unidades de exibição', self.open_units, 'units')
         line.addWidget(self.unit_button)
         self.unit_summary = QLabel()
         self.unit_summary.setObjectName('unitSummary')
         self._update_unit_summary()
         line.addWidget(self.unit_summary)
-        run = _button('Calcular (F5)', self.calculate, 'run', light=True)
+        run = _button('Calcular (F5)', self.calculate, 'run')
         run.setObjectName('calculateButton')
         line.addWidget(run)
         main.insertWidget(0, self.toolbar)
 
     def _build_member_tags_button(self):
         button = _button('Identificadores por tipo de barra', lambda: None, 'bar_ids',
-                         checkable=True, light=True)
+                         checkable=True)
         menu = QMenu(button)
         menu.setObjectName('memberTagsMenu')
         form = QWidget(menu)
@@ -506,15 +504,15 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             required += self.unit_summary.sizeHint().width() + layout.spacing()
         self.unit_summary.setVisible(width >= required)
 
-    def _workspace_button(self, label, command, icon, *, light=False):
+    def _workspace_button(self, label, command, icon):
         if not isinstance(command, str):
-            return _button(label, command, icon, light=light)
+            return _button(label, command, icon)
         if command.startswith('show_'):
             button = _button(label, lambda enabled: self._set_overlay(command, enabled),
-                             icon, checkable=True, light=light)
+                             icon, checkable=True)
             self._overlay_buttons[command] = button
             return button
-        button = _button(label, lambda: self.choose_tool(command), icon, checkable=True, light=light)
+        button = _button(label, lambda: self.choose_tool(command), icon, checkable=True)
         self.tool_buttons.addButton(button)
         self._cad_buttons[command] = button
         button.setChecked(command == 'select')
@@ -2111,8 +2109,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
 
 def start():
-    app=QApplication.instance() or QApplication(sys.argv)
-    app.setApplicationName('2DTruss');app.setStyle('Fusion')
+    app = workspace_application(sys.argv)
+    app.setApplicationName('2DTruss')
     if getattr(sys, 'frozen', False):
         preferences = Path(sys.executable).with_name('2DTruss.ini')
         settings = QSettings(str(preferences), QSettings.Format.IniFormat)

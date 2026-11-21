@@ -62,11 +62,11 @@ GLYPHS = {
 class IconButton(QToolButton):
     hover_delay_ms = 500
 
-    def __init__(self, label, callback, icon, *, checkable=False, light=False):
+    def __init__(self, label, callback, icon, *, checkable=False):
         super().__init__()
         self.set_label(label)
         self.setCheckable(checkable)
-        self.setIcon(action_icon(icon, light=light))
+        self.setIcon(action_icon(icon))
         self.setIconSize(QSize(17, 17))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.clicked.connect(callback)
@@ -99,7 +99,7 @@ class IconButton(QToolButton):
 
 
 @lru_cache(maxsize=None)
-def action_icon(name, *, light=False):
+def action_icon(name):
     path = QPainterPath()
     for stroke in GLYPHS[name].split('|'):
         start, *points = (tuple(map(float, pair.split(','))) for pair in stroke.split())
@@ -109,7 +109,7 @@ def action_icon(name, *, light=False):
 
     icon = QIcon()
     colors = {
-        QIcon.Mode.Normal: '#E8F3FB' if light else '#17658C',
+        QIcon.Mode.Normal: '#17658C',
         QIcon.Mode.Disabled: '#8298AA',
     }
     for mode, color in colors.items():

@@ -324,7 +324,6 @@ class RoofWizard(QWizard):
         self.setWindowTitle('Assistente de cobertura')
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setOption(QWizard.WizardOption.NoBackButtonOnStartPage)
-        self.setStyleSheet(parent.styleSheet())
         self.resize(800, 670)
         for button, label in [
             (QWizard.WizardButton.BackButton, 'Voltar'), (QWizard.WizardButton.NextButton, 'Avançar'),

@@ -1,7 +1,31 @@
 """Identidade de interface 2DTruss v0.1 — desktop engineering workspace."""
+import os
+import sys
+
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
-from PySide6.QtWidgets import QCheckBox, QStyle, QStyleOptionButton, QStyleOptionFocusRect
+from PySide6.QtWidgets import QApplication, QCheckBox, QStyle, QStyleOptionButton, QStyleOptionFocusRect
+
+
+def workspace_application(arguments):
+    """Cria a aplicação com a decoração clara no Windows."""
+    if sys.platform == 'win32':
+        os.environ.setdefault('QT_QPA_PLATFORM', 'windows:darkmode=0')
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs)
+    return QApplication.instance() or QApplication(arguments)
+
+
+def apply_workspace_theme(app):
+    """Inclui janelas auxiliares, menus e diálogos abertos pelo Qt."""
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs)
+    hints = app.styleHints()
+    if hasattr(hints, 'setColorScheme') and hints.colorScheme() != Qt.ColorScheme.Light:
+        hints.setColorScheme(Qt.ColorScheme.Light)
+    if app.style().objectName() != 'fusion':
+        app.setStyle('Fusion')
+    app.setPalette(workspace_palette())
+    if app.styleSheet() != STYLE:
+        app.setStyleSheet(STYLE)
 
 
 class WorkspaceCheckBox(QCheckBox):
@@ -53,6 +77,7 @@ def workspace_palette():
         'WindowText': '#263B4D',
         'Base': '#FFFFFF',
         'AlternateBase': '#F3F7FB',
+        'PlaceholderText': '#60788C',
         'Text': '#263B4D',
         'Button': '#F7F9FB',
         'ButtonText': '#263B4D',
@@ -61,7 +86,11 @@ def workspace_palette():
         'Mid': '#B6C9D8',
         'Dark': '#8198AB',
         'Shadow': '#526A7E',
+        'BrightText': '#803024',
+        'Link': '#11658F',
+        'LinkVisited': '#5A477A',
         'Highlight': '#D6EAF8',
+        'Accent': '#2476A0',
         'HighlightedText': '#143B55',
         'ToolTipBase': '#FFFFFF',
         'ToolTipText': '#263B4D',
@@ -75,30 +104,31 @@ def workspace_palette():
 STYLE = r'''
 QMainWindow, QWidget {font-family:"Segoe UI",Arial;font-size:9pt;color:#263B4D;}
 QMainWindow {background:#F3F6F9;}
-QDialog {background:#F2F6FA;}
+QDialog,QWizard,QWizardPage {background:#F2F6FA;}
+QToolTip {background:#FFFFFF;color:#263B4D;border:1px solid #BCCDD9;padding:3px;}
 QFrame#dialogSurface {background:#FFFFFF;border:1px solid #CEDDE9;border-radius:7px;}
 QWidget#loadDialogPage, QScrollArea#loadDialogScroll {background:#FFFFFF;}
 QTableWidget#factorTable QDoubleSpinBox {min-height:17px;padding:3px;}
-QFrame#quickAccess {background:#182B3C;}
-QLabel#appHeader {color:#FFFFFF;font-weight:700;padding:0 14px 0 3px;}
-QLabel#unitSummary {color:#D6E8F4;padding:0 5px 0 1px;}
+QFrame#quickAccess {background:#EDF3F8;border-bottom:1px solid #D3DEE7;}
+QLabel#appHeader {color:#1C3852;font-weight:700;padding:0 14px 0 3px;}
+QLabel#unitSummary {color:#344B60;padding:0 5px 0 1px;}
 QLabel#unitsSample {background:#EAF4FA;border:1px solid #CFDFEA;border-radius:4px;padding:8px;}
-QLabel#dialogHeading {font-size:12pt;font-weight:700;color:#FFFFFF;background:#1C3852;padding:11px 14px;border-radius:6px;}
+QLabel#dialogHeading {font-size:12pt;font-weight:700;color:#1C3852;background:#E4EFF7;padding:11px 14px;border-radius:6px;}
 QDialogButtonBox#dialogActions QPushButton {min-width:74px;padding:6px 12px;background:#FFFFFF;}
-QDialogButtonBox#dialogActions QPushButton:default {background:#176B9B;color:#FFFFFF;border-color:#176B9B;}
-QDialogButtonBox#dialogActions QPushButton:default:hover {background:#11537B;}
+QDialogButtonBox#dialogActions QPushButton:default {background:#DDEEF8;color:#13496D;border-color:#73A7C5;}
+QDialogButtonBox#dialogActions QPushButton:default:hover {background:#CDE6F5;}
 QDialogButtonBox#dialogActions QPushButton:hover {border-color:#719FBB;}
 QMenu {background:#FFFFFF;border:1px solid #BCCDD9;padding:4px;border-radius:5px;}
 QMenu::item {padding:5px 24px 5px 22px;}
 QMenu::item:selected {background:#E3F0F8;color:#164762;border-radius:3px;}
 QMenu#memberTagsMenu {background:#F3F7FA;border:1px solid #BCCDD9;}
-QFrame#quickAccess QToolButton {color:#F2F7FB;background:#263C50;border-color:#40586C;padding:5px 2px;}
-QFrame#quickAccess QToolButton:hover, QFrame#quickAccess QToolButton:checked {background:#3C5C74;}
-QFrame#quickAccess QToolButton:checked {border-color:#76C8F4;}
+QFrame#quickAccess QToolButton {color:#24445C;background:#F7FAFD;border-color:#C5D6E3;padding:5px 2px;}
+QFrame#quickAccess QToolButton:hover, QFrame#quickAccess QToolButton:checked {background:#DDEEF8;}
+QFrame#quickAccess QToolButton:checked {border-color:#78AFCB;}
 QFrame#quickAccess QToolButton::menu-indicator {image:none;}
-QFrame#quickAccess QToolButton#calculateButton {color:#FFFFFF;background:#0A689E;border-color:#3B91BD;font-weight:700;}
-QFrame#quickAccess QToolButton#calculateButton:hover {background:#08567F;}
-QFrame#toolDivider {background:#587084;margin:0;}
+QFrame#quickAccess QToolButton#calculateButton {color:#13496D;background:#D4EAF8;border-color:#73A7C5;font-weight:700;}
+QFrame#quickAccess QToolButton#calculateButton:hover {background:#C5E4F6;}
+QFrame#toolDivider {background:#B8CAD8;margin:0;}
 QFrame#statusBar {background:#F3F6F9;border-top:1px solid #D3DEE7;}
 QLabel#coordinates {color:#344B60;font-family:"Consolas";font-size:9pt;}
 QWidget#taskPanel {background:#FFFFFF;}
@@ -119,7 +149,7 @@ QToolButton:disabled {color:#728597;}
 QPushButton {background:#F6F9FB;border:1px solid #C8D7E4;border-radius:5px;padding:7px 9px;}
 QPushButton:hover {background:#EAF5FC;border-color:#7EADC7;}
 QPushButton:pressed {background:#D5ECF9;}
-QTreeWidget,QTableWidget,QListWidget {background:#FFFFFF;alternate-background-color:#F3F7FB;border:1px solid #DCE6EF;
+QTreeView,QTableView,QListView {background:#FFFFFF;alternate-background-color:#F3F7FB;border:1px solid #DCE6EF;
  selection-background-color:#D6EAF8;selection-color:#143B55;gridline-color:#E7EDF3;}
 QTreeWidget::item {padding:3px;}
 QTreeWidget::item:selected {background:#D6EAF8;color:#0A5A8C;}
@@ -132,6 +162,10 @@ QSplitter::handle {background:#DCE5ED;}
 QSplitter::handle:hover {background:#8CB5D0;}
 QScrollBar:vertical {background:#F4F7FA;width:9px;}
 QScrollBar::handle:vertical {background:#B6C9D8;border-radius:3px;min-height:22px;}
+QScrollBar:horizontal {background:#F4F7FA;height:9px;}
+QScrollBar::handle:horizontal {background:#B6C9D8;border-radius:3px;min-width:22px;}
+QScrollBar::add-line,QScrollBar::sub-line {background:#E6EFF6;subcontrol-origin:margin;}
+QScrollBar::add-page,QScrollBar::sub-page,QAbstractScrollArea::corner {background:#F4F7FA;}
 QFrame#viewportBar {background:#EDF3F8;border-top:1px solid #D9E4ED;border-bottom:1px solid #D9E4ED;}
 QLabel#viewMode {color:#17658C;font-weight:700;}
 QFrame#forceBar {background:#FFF8ED;border-bottom:1px solid #E9D8BD;}

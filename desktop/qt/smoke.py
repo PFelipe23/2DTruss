@@ -2,21 +2,52 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
+from PySide6.QtWidgets import QApplication, QColorDialog, QFileDialog, QInputDialog, QListView, QMessageBox
 
 from desktop.bridge import ROOT, load_project, write_project
 from desktop.cad_io import load_cad
 from poe_truss.roof_wizard import analyze_bracing, roof_alternatives
 from .app import DesktopApp
 from .roof_wizard import RoofWizard
+from .ui_theme import workspace_application
+
+
+def verify_light_dialogs(window):
+    if not QApplication.testAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs):
+        raise RuntimeError('As janelas de arquivo e cor ainda seguem o estilo do Windows')
+
+    file_dialog = QFileDialog(window, 'Abrir projeto')
+    dialogs = [file_dialog, QColorDialog(window), QInputDialog(window), QMessageBox(window)]
+    dialogs[-1].setText('Verificação do tema claro')
+    window.open_general_actions()
+    dialogs.append(window._load_dialogs[window.actions_tab])
+    try:
+        for dialog in dialogs:
+            dialog.show()
+            QApplication.processEvents()
+            colors = dialog.palette()
+            image = dialog.grab().toImage()
+            if (colors.color(QPalette.ColorRole.Base).lightness() < 230
+                    or colors.color(QPalette.ColorRole.Text).lightness() > 110
+                    or image.isNull() or image.pixelColor(5, 5).lightness() < 200):
+                raise RuntimeError(f'Fundo ou texto fora do tema claro em {type(dialog).__name__}')
+            if dialog is file_dialog and dialog.findChild(QListView) is None:
+                raise RuntimeError('A janela de arquivos deve usar os controles do aplicativo')
+            dialog.hide()
+    finally:
+        for dialog in dialogs:
+            dialog.close()
 
 
 def run():
-    app = QApplication([])
+    app = workspace_application([])
     window = DesktopApp()
     try:
         window.show()
         app.processEvents()
+        verify_light_dialogs(window)
         window.session.calculate()
         window.refresh()
         window.open_3d()
