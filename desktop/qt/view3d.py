@@ -16,14 +16,15 @@ from PySide6.QtCore import Qt,QPointF,QRectF,QSignalBlocker,QTimer
 from PySide6.QtGui import QColor,QBrush,QPen,QPolygonF,QPainter,QFont
 from PySide6.QtWidgets import (
     QVBoxLayout,QHBoxLayout,QGridLayout,QLabel,QGraphicsScene,QGraphicsView,
-    QGraphicsPolygonItem,QGraphicsEllipseItem,QGraphicsItem,QComboBox,
+    QGraphicsPolygonItem,QGraphicsEllipseItem,QGraphicsItem,
     QColorDialog,QSlider,QFormLayout,QWidget,QToolButton,QMenu,
     QTabWidget,QDoubleSpinBox,QGroupBox,QMessageBox,QFileDialog,
 )
-from desktop.preview3d import Camera, camera_projection, color_key,palette_keys
+from desktop.preview3d import Camera, camera_projection, unproject, color_key,palette_keys
 from desktop.section_mesh import load_shape_catalog,make_model_meshes,make_section_layout,export_obj,display_scaled_vertices
 from desktop.bridge import CATALOG
 from poe_truss.model import GROUPS
+from .ui_theme import WorkspaceComboBox as QComboBox
 from .action_icons import IconButton
 from .display_units import DisplayUnits
 from .ui_theme import WorkspaceCheckBox as QCheckBox
@@ -166,16 +167,20 @@ class MeshLayer(QGraphicsItem):
         self.update()
 
     def paint(self, painter, option, widget=None):
-        for polygon, pen, brush, _ in self.faces:
+        for polygon, pen, brush, _, _ in self.faces:
             painter.setPen(pen)
             painter.setBrush(brush)
             painter.drawPolygon(polygon)
 
-    def member_at(self, point):
-        for polygon, _, _, member in reversed(self.faces):
+    def face_at(self, point):
+        for polygon, _, _, member, depth in reversed(self.faces):
             if polygon.containsPoint(point, Qt.FillRule.OddEvenFill):
-                return member
+                return member, depth
         return None
+
+    def member_at(self, point):
+        face = self.face_at(point)
+        return face[0] if face else None
 
 
 class OrbitView(QGraphicsView):
@@ -198,6 +203,8 @@ class OrbitView(QGraphicsView):
     def mousePressEvent(self,e):
         if e.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
             self._drag_button = e.button()
+            if e.button() == Qt.MouseButton.LeftButton:
+                self.dialog.set_orbit_pivot(self.mapToScene(e.position().toPoint()))
             self._dragged = False
             self._previous=e.position();self.setCursor(Qt.CursorShape.ClosedHandCursor)
             e.accept();return
@@ -247,6 +254,8 @@ class Truss3DView(QWidget):
         self._scaled_meshes = []
         self._cached_scale = None
         self._angles = (30., 25.)
+        self._orbit_pivot = None
+        self._projection_offset = QPointF()
         self._orbit_update=QTimer(self);self._orbit_update.setSingleShot(True)
         self._orbit_update.setInterval(16);self._orbit_update.timeout.connect(self.redraw)
         root=QVBoxLayout(self);root.setSpacing(4)
@@ -430,10 +439,18 @@ class Truss3DView(QWidget):
             self.preset.setCurrentIndex(-1)
         self.schedule_redraw()
 
+    def set_orbit_pivot(self, point):
+        face = self.mesh_layer.face_at(point)
+        local = point - self._projection_offset
+        self._orbit_pivot = (
+            unproject((local.x(), local.y(), face[1] if face else 0.), Camera(*self._angles)),
+            QPointF(point),
+        )
+
     def orbit(self, dx, dy):
         yaw, elevation = self._angles
-        yaw = (yaw + dx * 0.55) % 360
-        elevation = max(-90, min(90, elevation - dy * 0.5))
+        yaw = (yaw - dx * 0.55) % 360
+        elevation = max(-90, min(90, elevation + dy * 0.5))
         self._set_angles(yaw, elevation)
         with QSignalBlocker(self.preset):
             self.preset.setCurrentIndex(-1)
@@ -472,6 +489,8 @@ class Truss3DView(QWidget):
         if label not in PRESETS:return
         with QSignalBlocker(self.preset):
             self.preset.setCurrentText(label)
+        self._orbit_pivot = None
+        self._projection_offset = QPointF()
         self._set_angles(*PRESETS[label])
         self.redraw();self.fit()
 
@@ -481,6 +500,8 @@ class Truss3DView(QWidget):
             self.session = session
             self._mesh_revision = None
             self._selected_member = None
+            self._orbit_pivot = None
+            self._projection_offset = QPointF()
         self.case_id = case_id
         if self._mesh_revision != self.session.revision:
             self.load_group()
@@ -545,7 +566,7 @@ class Truss3DView(QWidget):
             return
         meta=self._member_meta.get(mid,{})
         n=self.axial().get(mid)
-        lines=[f'<b>{escape(mid)}</b> · {escape(m.group)}',escape(m.profile),
+        lines=[f'<b>{escape(m.label)}</b> · {escape(m.group)}',escape(m.profile),
                f'L = {self.units.length_text(self.session.model.member_length(m))}',
                f'Componentes: {meta.get("components","?")}']
         if n is not None:
@@ -557,11 +578,23 @@ class Truss3DView(QWidget):
         if not hasattr(self,'view'):return
         self._ensure_scaled_meshes()
         scene = self.view.scene()
+        viewport = self.view.viewport().rect()
+        visible = self.view.mapToScene(viewport).boundingRect()
+        center = self.view.mapToScene(viewport.center())
         for item in self._overlays:
             scene.removeItem(item)
         self._overlays.clear()
         mode=self.mode.currentData();forces=self.axial()
-        project = camera_projection(Camera(*self._angles))
+        projection = camera_projection(Camera(*self._angles))
+        if self._orbit_pivot is not None:
+            pivot, anchor = self._orbit_pivot
+            x, y, _ = projection(pivot)
+            self._projection_offset = anchor - QPointF(x, y)
+
+        def project(vertex):
+            x, y, z = projection(vertex)
+            return x + self._projection_offset.x(), y + self._projection_offset.y(), z
+
         all_faces=[];colors={}
         for mesh, member, drawn in self._scaled_meshes:
             key=color_key(member,self.session.catalog,mode,forces)
@@ -577,7 +610,7 @@ class Truss3DView(QWidget):
         styles = {}
         solid = self.surface_style.currentText() == 'Sólido'
         edges = self.show_edges.isChecked()
-        for _,i,mesh,base,pts in sorted(all_faces,key=lambda x:x[0]):
+        for depth,i,mesh,base,pts in sorted(all_faces,key=lambda x:x[0]):
             poly=QPolygonF([QPointF(p[0],p[1]) for p in pts])
             tint = 127 if i in (0, 1) else 87 if i % 3 == 0 else 100
             selected = self._selected_member == mesh.member_id
@@ -589,7 +622,7 @@ class Truss3DView(QWidget):
                 pen = QPen(QColor('#244258') if edges else color, 0.65 if edges else 0)
                 brush = QBrush(color) if solid else QBrush(Qt.BrushStyle.NoBrush)
                 styles[style] = pen, brush
-            faces.append((poly, *styles[style], mesh.member_id))
+            faces.append((poly, *styles[style], mesh.member_id, depth))
         self.mesh_layer.set_faces(faces)
         if self.show_axes.isChecked():
             nd = self._nodes
@@ -615,7 +648,12 @@ class Truss3DView(QWidget):
         if len(self._warnings)>5:shown.append(f'+ {len(self._warnings)-5} avisos semelhantes')
         self.issue.setText('\n'.join(shown) if shown else 'Contornos ideais gerados; conferir catálogo e condições de ligação.')
         if faces or self._overlays:
-            scene.setSceneRect(scene.itemsBoundingRect().adjusted(-140,-140,140,140))
+            rect = scene.itemsBoundingRect().adjusted(-140, -140, 140, 140)
+            if self._orbit_pivot is not None:
+                scene.setSceneRect(rect.united(visible.adjusted(-20, -20, 20, 20)))
+                self.view.centerOn(center)
+            else:
+                scene.setSceneRect(rect)
 
     def save_obj(self):
         self._ensure_meshes()

@@ -30,15 +30,13 @@ Para uma compilação isolada, defina `TRUSS_BUILD_DIR` e `TRUSS_DIST_DIR` como 
 
 ## Assistente de cobertura
 
-Abra **Assistente de cobertura**, ao lado de **Novo**, para preparar um projeto independente.
+Em **Novo**, escolha abrir o assistente ou começar com um projeto em branco. O ícone **Assistente de cobertura**, ao lado de **Novo**, também pode ser usado a partir de um projeto aberto.
 
-1. Informe o vão, a distância entre treliças, a forma da cobertura, o desnível, a faixa de alturas e o passo máximo real entre apoios da telha fornecido pelo fabricante. A busca usa os perfis e o aço carregados na origem.
-2. Preencha a massa da telha, acessórios, sobrecarga e, se aplicáveis, as intensidades normais de pressão e sucção. O 2DTruss cria padrões e casos separados e distribui as ações aos nós. A combinação **REF_GRAV** reúne apenas as ações gravitacionais com fator unitário para comparar geometrias. Os coeficientes e intensidades de projeto são definidos pelo responsável.
-3. Escolha a alternativa após comparar passo, flecha e massa de barras. A coluna **Critérios** indica atendimento apenas ao passo e à flecha informados no assistente. Caso a geometria precise de revisão, volte e ajuste os parâmetros.
-4. Para um estudo transversal, marque a opção, selecione pares de nós dos dois banzos e informe a quantidade de vãos, a força horizontal por nó superior, a área de cada barra e a referência. Clique **Analisar planos selecionados** para comparar esforços e deslocamentos.
-5. Clique **Gerar projeto** e salve o JSON. Abra **Mais comandos → Planos de travamento** para consultar uma estação em um projeto separado, com casos **H_POS** e **H_NEG**, esforços, deslocamentos e reações.
-
-O estudo de travamento é um modelo vertical isolado em X, com barras axiais bilaterais e apoios idealizados nos extremos inferiores. O eixo horizontal do plano acompanha o espaçamento entre treliças. A referência inserida documenta a origem da ação e dos apoios. O estudo não confirma automaticamente contenções laterais na treliça principal. A correspondência com o procedimento da apostila de Olídio Volpato requer a conferência da edição e do trecho aplicável.
+1. Escolha as unidades de comprimento e força do assistente. Informe o vão, o espaçamento entre treliças, o modelo, a faixa de alturas e o passo máximo real entre terças. A prévia 2D acompanha os campos. Para cobertura inclinada, o desnível é proporcional ao vão a partir do modelo de origem.
+2. Confira as cargas de estudo. O peso próprio das barras é automático. Os valores iniciais por área são 6,0 kgf/m² de telha, 6,0 de terças, 1,0 de estabilizadores, 10,0 de utilidades e 25,0 de sobrecarga. A comparação de flechas usa fatores unitários. Os esforços do estudo ponderado usam 1,25 para permanentes e 1,50 para sobrecarga.
+3. Clique em uma alternativa para examinar a geometria e os perfis na prévia. A busca compara perfis simples nas famílias do modelo de origem e prefere a menor massa que atende ao limite de flecha entre os perfis avaliados. Essa busca preliminar não verifica resistência.
+4. Se habilitar o travamento, indique 2 ou 3 módulos entre treliças, bitola das diagonais redondas, área das demais barras e força por nó interno. Em duas águas são estudadas quatro faixas espelhadas, uma por lado em cada banzo. O modelo idealizado usa quatro apoios de canto e aplica a força nos dois sentidos, internamente em uma borda. Os cordões e as diagonais são unilaterais à tração, com esforço zero quando frouxos. Apenas os montantes admitem compressão.
+5. Clique em **Gerar projeto**. Os padrões, casos e combinações principais começam vazios. Para consultar os planos, salve a cobertura e abra **Mais comandos → Planos de travamento**.
 
 ## Interface e atalhos
 

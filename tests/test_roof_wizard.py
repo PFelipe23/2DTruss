@@ -8,10 +8,47 @@ import pytest
 from desktop.bridge import Session, load_project
 from poe_truss.roof_wizard import (
     analyze_bracing, bracing_plane, bracing_stations, roof_alternatives, roof_project,
+    chord_bracing_planes, chord_bracing_project, preliminary_roof_project,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_study_uses_distinct_service_and_factored_loads_and_sizes_candidate():
+    template = load_project(ROOT / 'examples' / 'cobertura_duas_aguas.json')
+    study = preliminary_roof_project(template, name='Estudo', geometry=template['geometry'], intensities={})
+    assert [p.get('value') for p in study['load_patterns']] == [None, 6, 6, 1, 10, 25]
+    assert set(study['combinations'][0]['factors'].values()) == {1}
+    assert study['combinations'][1]['factors']['CASO_Q1'] == 1.50
+    assert study['combinations'][1]['factors']['CASO_G1'] == 1.25
+    session = Session(study)
+    candidate = roof_alternatives(study, session.catalog, height_min=1.1, height_max=1.1,
+                                  ratio=250, size_profiles=True)['candidates'][0]
+    assert all(section['count'] == 1 for section in candidate['sections'].values())
+    assert candidate['meets_geometric_service_criteria']
+    assert {member.id[:2] for member in session.model.members} == {'BS', 'BI', 'MO', 'DI'}
+
+
+@pytest.mark.parametrize('modules', [2, 3])
+def test_symmetric_chord_planes_use_round_tension_only_diagonals(modules):
+    roof = sample_roof()
+    catalog = Session(roof).catalog
+    widths = chord_bracing_planes(roof, catalog)
+    assert widths['BS-E'] == pytest.approx(widths['BS-D'])
+    assert widths['BI-E'] == pytest.approx(widths['BI-D'])
+    for key, width in widths.items():
+        project = chord_bracing_project(roof, key, width, dict(
+            bays=modules, area_mm2=1000, diameter_mm=12.5, force_kn=2,
+        ))
+        session = Session(project, catalog)
+        results = session.calculate()['analyses']
+        for case in results.values():
+            axial = case['axial_n']
+            assert min(axial[m.id] for m in session.model.members if m.group != 'montante') >= 0
+            assert any(axial[m.id] > 0 for m in session.model.members if m.group == 'diagonal')
+            assert any(axial[m.id] == 0 for m in session.model.members if m.group == 'diagonal')
+            assert abs(case['equilibrium']['sum_fx_n']) < 1e-7
 
 
 def sample_roof():

@@ -6,6 +6,7 @@ from typing import Any
 from .catalog import Profile
 
 GROUPS = ('superior', 'inferior', 'montante', 'diagonal')
+MEMBER_PREFIX = dict(zip(GROUPS, ('BS', 'BI', 'MO', 'DI')))
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,17 @@ class Member:
     profile: str
     area: float  # mm2
     mass: float  # kg/m
+    tension_only: bool = False
+
+    @property
+    def label(self):
+        prefix = MEMBER_PREFIX.get(self.group)
+        if prefix:
+            previous = next((code for code in ('M', *MEMBER_PREFIX.values())
+                             if self.id.startswith(code) and self.id[len(code):].isdigit()), None)
+            if previous:
+                return prefix + self.id[len(previous):]
+        return self.id
 
 
 @dataclass
@@ -53,7 +65,7 @@ class Model:
         return {
             'nodes': [{'id':n.id,'x_mm':n.x,'y_mm':n.y} for n in self.nodes],
             'members':[{'id':m.id,'i':m.i,'j':m.j,'group':m.group,
-                        'profile':m.profile,'area_mm2':m.area,'mass_kg_m':m.mass,
+                        'profile':m.profile,'area_mm2':m.area,'mass_kg_m':m.mass, **({'tension_only': True} if m.tension_only else {}),
                         'length_mm':self.member_length(m)} for m in self.members],
             'supports':[{'node':k,'ux':v[0],'uy':v[1]} for k,v in self.supports.items()],
             'span_mm':self.span_mm,'frame_spacing_mm':self.frame_spacing_mm,
@@ -141,7 +153,8 @@ def make_model(project: dict[str,Any], catalog: dict[str,Profile]) -> Model:
     members=[]
     def add(i,j,group):
         name,area,mass=section_map[group]
-        members.append(Member(f'M{len(members)+1:03d}',i,j,group,name,area,mass))
+        prefix = MEMBER_PREFIX[group] if g.get('member_ids') == 'group' else 'M'
+        members.append(Member(f'{prefix}{len(members)+1:03d}',i,j,group,name,area,mass))
     for i in range(panels):
         add(bottom[i].id,bottom[i+1].id,'inferior')
         add(top[i].id,top[i+1].id,'superior')
@@ -184,15 +197,16 @@ def _explicit_model(project:dict) -> Model:
     nodes=[Node(str(n['id']),float(n['x_mm']),float(n['y_mm'])) for n in d['nodes']]
     members=[Member(str(m['id']),str(m['i']),str(m['j']),str(m.get('group','benchmark')),
                     str(m.get('profile','AREA_EXPLICITA')),_finite_positive(m['area_mm2'],'Área da barra'),
-                    float(m.get('mass_kg_m',0))) for m in d['members']]
+                    float(m.get('mass_kg_m',0)), m.get('tension_only') is True) for m in d['members']]
     ids={n.id for n in nodes}
     supports=_parse_supports(d.get('supports',[]),ids)
     xs=[n.x for n in nodes]
-    L=max(xs)-min(xs)
+    L=max(xs)-min(xs) if xs else 0.
     spacing=float(project.get('geometry',{}).get('frame_spacing_m',1))*1000
     model=Model(nodes,members,supports,L,spacing,'explicit','explicit',0,
                 chord_loads=d.get('chord_loads') is True)
-    validate_model(model)
+    if nodes or members:
+        validate_model(model)
     return model
 
 

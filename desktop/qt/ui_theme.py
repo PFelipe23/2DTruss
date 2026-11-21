@@ -4,7 +4,7 @@ import sys
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPalette, QPen
-from PySide6.QtWidgets import QApplication, QCheckBox, QStyle, QStyleOptionButton, QStyleOptionFocusRect
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QStyle, QStyleOptionButton, QStyleOptionFocusRect
 
 
 def workspace_application(arguments):
@@ -26,6 +26,14 @@ def apply_workspace_theme(app):
     app.setPalette(workspace_palette())
     if app.styleSheet() != STYLE:
         app.setStyleSheet(STYLE)
+
+
+class WorkspaceComboBox(QComboBox):
+    """Lista inteira, limitada apenas pelo tamanho disponível na tela."""
+
+    def showPopup(self):
+        self.setMaxVisibleItems(max(1, self.count()))
+        super().showPopup()
 
 
 class WorkspaceCheckBox(QCheckBox):
@@ -154,6 +162,7 @@ QTreeView,QTableView,QListView {background:#FFFFFF;alternate-background-color:#F
 QTreeWidget::item {padding:3px;}
 QTreeWidget::item:selected {background:#D6EAF8;color:#0A5A8C;}
 QHeaderView::section {background:#EFF4F8;color:#38586C;padding:6px;border:0;border-bottom:1px solid #D5E3ED;font-weight:600;}
+QComboBox {combobox-popup: 0;}
 QComboBox,QSpinBox,QDoubleSpinBox,QLineEdit {background:#FFFFFF;border:1px solid #C7D6E3;border-radius:4px;padding:4px;min-height:24px;}
 QComboBox:focus,QSpinBox:focus,QDoubleSpinBox:focus,QLineEdit:focus {border-color:#1385BA;}
 QGroupBox {border:1px solid #D9E5EF;border-radius:5px;margin-top:12px;padding:12px 8px 9px;font-weight:600;background:#FFFFFF;}

@@ -9,7 +9,7 @@ from queue import Queue, Empty
 from threading import Thread
 from PySide6.QtCore import Qt,QSignalBlocker,QTimer
 from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QGroupBox,QFormLayout,QLabel,
-    QComboBox,QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
+    QDoubleSpinBox,QSpinBox,QTableWidget,QTableWidgetItem,
     QHeaderView,QInputDialog,QMessageBox,QLineEdit,QTreeWidget,QTreeWidgetItem,
     QAbstractItemView)
 from desktop import editing, workflow
@@ -17,6 +17,7 @@ from poe_truss.model import GROUPS,geometry_diagnostics
 from poe_truss.loads import load_patterns, resolve_case_loads
 from poe_truss.materials import STEEL_GRADES
 from poe_truss.search import suggest_geometry
+from .ui_theme import WorkspaceComboBox as QComboBox
 from .action_icons import IconButton
 from .display_units import LoadField
 from .profile_picker import ProfilePicker
@@ -246,7 +247,8 @@ class WorkflowMixin:
 
     def _set_action_members(self, members):
         self.action_member_ids = list(members)
-        self.action_members.setText(', '.join(members))
+        labels = {member.id: member.label for member in self.session.model.members}
+        self.action_members.setText(', '.join(labels.get(member, member) for member in members))
         self.action_members.setToolTip(self.action_members.text())
 
     def _take_action_members(self):

@@ -10,6 +10,8 @@ from copy import deepcopy
 from math import hypot, isfinite
 from typing import Iterable
 
+from poe_truss.model import MEMBER_PREFIX
+
 
 def materialize(project:dict, model) -> dict:
     p=deepcopy(project)
@@ -54,6 +56,15 @@ def _id(prefix, items, p):
     return f'{prefix}{k:03d}'
 
 
+def _member_id(project, members, group):
+    series = project.setdefault('cad_sequences', {})
+    numeric = [int(member['id'].lstrip('ABCDEFGHIJKLMNOPQRSTUVWXYZ')) for member in members
+               if member['id'].lstrip('ABCDEFGHIJKLMNOPQRSTUVWXYZ').isdigit()]
+    number = max(series.get('M', 1), max(numeric, default=0) + 1)
+    series['M'] = number + 1
+    return f'{MEMBER_PREFIX.get(group, "M")}{number:03d}'
+
+
 def _xy(x,y):
     x,y=float(x),float(y)
     if not isfinite(x) or not isfinite(y):raise ValueError('Coordenadas não finitas')
@@ -85,7 +96,7 @@ def add_member(project:dict,model,nid_a:str,nid_b:str,*,group='diagonal')->tuple
     # Dois nós novos sem ligação com o modelo não constituem um modelo estrutural
     # válido. O usuário precisa anexá-los à malha existente.
     registered={x['id'] for x in d['nodes']}
-    if not ({nid_a,nid_b}&registered):
+    if registered and not ({nid_a,nid_b}&registered):
         raise ValueError('Conecte primeiro pelo menos um nó à estrutura existente')
     if group not in p.get('sections',{}):
         raise ValueError('Grupo não tem seção cadastrada')
@@ -99,7 +110,7 @@ def add_member(project:dict,model,nid_a:str,nid_b:str,*,group='diagonal')->tuple
         draft=_find(drafts,nid)
         if draft:
             d['nodes'].append(deepcopy(draft));drafts.remove(draft)
-    mid=_id('M',d['members'],p)
+    mid=_member_id(p, d['members'], group)
     d['members'].append({'id':mid,'i':nid_a,'j':nid_b,'group':group,
                          'profile':section['profile'],'area_mm2':prof.area_mm2*cnt,
                          'mass_kg_m':prof.mass_kg_m*cnt})
@@ -121,13 +132,11 @@ def split_members(project:dict,model,member_ids:Iterable[str],t:float=.5)->tuple
         nid=_id('N',d['nodes']+p.get('cad_drafts',[]),p)
         d['nodes'].append({'id':nid,'x_mm':x,'y_mm':y})
         original=deepcopy(member)
-        _ids_before=[m['id'] for m in d['members']]
-        mseq=p.setdefault('cad_sequences',{})
-        mseq['M']=max(mseq.get('M',1),max((int(x[1:]) for x in _ids_before if x.startswith('M') and x[1:].isdigit()),default=0)+1)
+        previously_registered = list(d['members'])
         d['members'].remove(member)
         replacements = []
         for a_id,b_id in ((original['i'],nid),(nid,original['j'])):
-            m=deepcopy(original);m['id']=_id('M',d['members'],p);m['i']=a_id;m['j']=b_id
+            m=deepcopy(original);m['id']=_member_id(p, previously_registered, m['group']);m['i']=a_id;m['j']=b_id
             d['members'].append(m)
             replacements.append(m['id'])
         for case in [*p.get('load_patterns', []), *p.get('load_cases', [])]:
@@ -158,10 +167,20 @@ def delete_elements(project:dict,model,node_ids=(),member_ids=())->dict:
     all_n={r['id'] for r in d['nodes']+p.get('cad_drafts',[])}
     all_m={r['id'] for r in d['members']}
     if remove_nodes-all_n or remove_members-all_m:raise ValueError('Seleção contém identificador inexistente')
-    if remove_nodes:
-        remove_members|={m['id'] for m in d['members'] if m['i'] in remove_nodes or m['j'] in remove_nodes}
+    incident = {m['id'] for m in d['members'] if m['i'] in remove_nodes or m['j'] in remove_nodes}
+    if incident - remove_members:
+        raise ValueError('Selecione também as barras ligadas aos nós que deseja excluir.')
     d['members']=[m for m in d['members'] if m['id'] not in remove_members]
-    d['nodes']=[n for n in d['nodes'] if n['id'] not in remove_nodes]
+    kept_nodes = [n for n in d['nodes'] if n['id'] not in remove_nodes]
+    connected = {m[end] for m in d['members'] for end in ('i', 'j')}
+    isolated = [n for n in kept_nodes if n['id'] not in connected]
+    isolated_ids = {n['id'] for n in isolated}
+    nodal = [row['node'] for case in [*p.get('load_cases', []), *p.get('load_patterns', [])]
+             if case.get('kind') == 'nodal' for row in case.get('loads', [])]
+    if isolated_ids.intersection([*nodal, *(row['node'] for row in d['supports'])]):
+        raise ValueError('Um nó com carga ou apoio ficaria isolado. Revise as atribuições ou a seleção.')
+    d['nodes'] = [n for n in kept_nodes if n['id'] in connected]
+    p.setdefault('cad_drafts', []).extend(isolated)
     p['cad_drafts']=[n for n in p.get('cad_drafts',[]) if n['id'] not in remove_nodes]
     d['supports']=[s for s in d['supports'] if s['node'] not in remove_nodes]
     for c in [*p.get('load_cases', []), *p.get('load_patterns', [])]:

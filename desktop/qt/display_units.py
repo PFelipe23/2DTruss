@@ -2,10 +2,11 @@
 from dataclasses import asdict, dataclass
 
 from PySide6.QtCore import QLocale
-from PySide6.QtWidgets import (QComboBox, QDialogButtonBox, QDoubleSpinBox,
+from PySide6.QtWidgets import ( QDialogButtonBox, QDoubleSpinBox,
                                QFormLayout, QLabel, QSpinBox)
 
 from poe_truss.units import FORCE_TO_N, LENGTH_TO_MM
+from .ui_theme import WorkspaceComboBox as QComboBox
 from .ui_theme import WorkspaceCheckBox as QCheckBox
 from .workspace_dialog import WorkspaceDialog
 

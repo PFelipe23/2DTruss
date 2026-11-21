@@ -98,14 +98,14 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertTrue(any(top.startswith('+') and bottom.startswith('-')
                                 for top, bottom in (label.values for label in labels)))
             table = window.quick_table
-            member = table.item(0, 0).text()
+            member = table.item(0, 0).data(Qt.ItemDataRole.UserRole)
             expected = envelope_values(envelope[member], window.units, unit=False)
             self.assertEqual(tuple(table.item(0, i).text() for i in (2, 3)), expected)
             for col, key in [(2, 'tension_case'), (3, 'compression_case')]:
                 if envelope[member][key]:
                     self.assertIn(envelope[member][key], table.item(0, col).toolTip())
             window.cases.setCurrentText('W_UP')
-            self.assertEqual(table.item(0, 0).text(), member)
+            self.assertEqual(table.item(0, 0).data(Qt.ItemDataRole.UserRole), member)
 
             window.result_views.setCurrentIndex(1)
             app.processEvents()
@@ -221,7 +221,7 @@ class QtRedesignSmoke(unittest.TestCase):
     def test_display_units_convert_results_and_keep_the_model_revision(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from tempfile import TemporaryDirectory
-        from PySide6.QtCore import QSettings
+        from PySide6.QtCore import QSettings, Qt
         from PySide6.QtWidgets import QApplication
         from desktop.qt.app import DesktopApp
         from desktop.qt.display_units import DisplayUnits, LoadField
@@ -256,14 +256,14 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertIs(window.session.result, result)
             self.assertEqual(window.quick_table.horizontalHeaderItem(2).text(), 'N (kgf)')
             self.assertEqual(window.quick_table.horizontalHeaderItem(3).text(), 'Seção')
-            member = window.quick_table.item(0, 0).text()
+            member = window.quick_table.item(0, 0).data(Qt.ItemDataRole.UserRole)
             axial = result['analyses'][window.case_id]['axial_n'][member]
             self.assertEqual(window.quick_table.item(0, 2).text(), units.force_text(axial, signed=True, unit=False))
             window.member_tag_checks['diagonal'].setChecked(True)
             self.assertTrue(window.view._identifiers)
             self.assertTrue(all(not label.node for label in window.view._identifiers))
             self.assertEqual({label.text() for label in window.view._identifiers},
-                             {m.id for m in window.session.model.members if m.group == 'diagonal'})
+                             {m.label for m in window.session.model.members if m.group == 'diagonal'})
             window._set_overlay('show_ids', True)
             self.assertTrue(any(label.node for label in window.view._identifiers))
             window.member_tag_checks['diagonal'].setChecked(False)
@@ -343,7 +343,7 @@ class QtRedesignSmoke(unittest.TestCase):
             window._load_dialogs[window.actions_tab].close()
             window.cases.setCurrentText('W_UP')
             window._set_overlay('show_ids', True)
-            window.force_values.click()
+            self.assertTrue(window.force_values.isChecked())
             app.processEvents()
             window.fit()
             view = window.view
@@ -501,7 +501,7 @@ class QtRedesignSmoke(unittest.TestCase):
             self.assertGreater(window.quick_table.rowCount(), 0)
             self.assertEqual(window.view.selected_ids(), [key])
             window.quick_select_result(0, 0)
-            first_result = ('member', window.quick_table.item(0, 0).text())
+            first_result = ('member', window.quick_table.item(0, 0).data(Qt.ItemDataRole.UserRole))
             self.assertEqual(window.view.selected_ids(), [first_result])
             self.assertTrue(window._model_items[first_result].isSelected())
 
@@ -556,18 +556,24 @@ class QtRedesignSmoke(unittest.TestCase):
         window.show()
         try:
             path = ROOT / 'examples' / 'FTool_A02_trelica_triangular.json'
+            from PySide6.QtWidgets import QMessageBox
             for replace_project in (window.new, window.open):
                 with self.subTest(action=replace_project.__name__):
+                    window._replace_project(Session())
                     window.calculate()
                     window.open_3d()
                     self.assertTrue(window._view3d.axial())
-                    with patch('PySide6.QtWidgets.QFileDialog.getOpenFileName',
-                               return_value=(str(path), '')):
+                    with patch('PySide6.QtWidgets.QFileDialog.getOpenFileName', return_value=(str(path), '')), \
+                            patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.No):
                         replace_project()
-                    self.assertIs(window.canvas_stack.currentWidget(), window._view3d)
+                    expected = window.view if replace_project == window.new else window._view3d
+                    self.assertIs(window.canvas_stack.currentWidget(), expected)
                     self.assertIs(window._view3d.session, window.session)
                     self.assertFalse(window._view3d.axial())
                     self.assertIsNone(window.session.result)
+                    if replace_project == window.new:
+                        self.assertFalse(window.session.model.nodes)
+                        self.assertFalse(window.session.project['load_cases'])
 
             window.open_3d()
             self.assertIs(window._view3d.session, window.session)

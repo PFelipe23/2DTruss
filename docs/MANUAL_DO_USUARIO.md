@@ -130,11 +130,11 @@ Escolha **G** no seletor **Carregamento** e ligue **Cargas**. As setas aparecem 
 
 Faça este exercício em outra cópia do projeto. As tabelas de referência das próximas seções usam o exemplo original.
 
-1. Na barra inferior, escolha **Seleção → Barras**. Localize **M001** pelo ID em **Modelo** ou use o rótulo no primeiro segmento do banzo inferior. Selecione a barra.
-2. Na barra superior, clique em **Inserir cargas em barras**. Crie o padrão **W_BARRA** caso o aplicativo solicite um identificador. Confirme **M001** em **Barras**. Para atualizar a lista, selecione outras barras no desenho e clique em **Usar barras selecionadas no desenho**, ao lado do campo.
+1. Na barra inferior, escolha **Seleção → Barras**. Localize **BI001** em **Modelo** (ID interno M001 no arquivo de exemplo) ou use o rótulo no primeiro segmento do banzo inferior. Selecione a barra.
+2. Na barra superior, clique em **Inserir cargas em barras**. Crie o padrão **W_BARRA** caso o aplicativo solicite um identificador. Confirme **BI001** em **Barras**. Para atualizar a lista, selecione outras barras no desenho e clique em **Usar barras selecionadas no desenho**, ao lado do campo.
 3. Informe **2,40 kN/m**, **Comprimento real** e **Para baixo**. Em **Tratamento**, escolha **Forças nodais + cortante e momento local** e clique em **Aplicar alterações** (✓). O modo **Forças nodais equivalentes** fornece a mesma contribuição nodal ao cálculo global.
 4. Abra **Casos de Carregamentos**, crie **BARRA_DEMO** e selecione **W_BARRA** como padrão inicial. Mantenha o fator em **1,00**, aplique, feche a janela e pressione **F5**.
-5. Escolha **BARRA_DEMO** acima do desenho e clique em **M001**. No painel esquerdo, confira V na extremidade i = **+1,20 kN**, V na extremidade j = **−1,20 kN** e M no meio do vão = **+0,30 kN·m**. A barra tem 1,00 m e os valores seguem os eixos locais da barra biapoiada. As extremidades têm momento nulo.
+5. Escolha **BARRA_DEMO** acima do desenho e clique em **BI001**. No painel esquerdo, confira V na extremidade i = **+1,20 kN**, V na extremidade j = **−1,20 kN** e M no meio do vão = **+0,30 kN·m**. A barra tem 1,00 m e os valores seguem os eixos locais da barra biapoiada. As extremidades têm momento nulo.
 
 ![Exemplo da carga linear atribuída à barra M001](media/manual/07-carga-na-barra.png)
 
@@ -169,7 +169,7 @@ Os carregamentos são verticais e simétricos ao longo do vão. Cada apoio receb
 
 ![Envoltória ELU com compressão azul, tração vermelha e tabela de barras](media/manual/03-envoltoria-elu.png)
 
-Neste arquivo, **M019** é uma das barras com maior tração, de **+65,70 kN**, e **M012** é uma das barras com maior compressão, de **−66,44 kN**. Como o exemplo tem uma única combinação ELU, ela governa cada extremo disponível. O esforço da tabela é uma **solicitação**. A verificação da resistência da barra depende de perfil, material, ligações e condições de estabilidade.
+Neste arquivo, **BI019** é uma das barras com maior tração, de **+65,70 kN**, e **BS012** é uma das barras com maior compressão, de **−66,44 kN**. Como o exemplo tem uma única combinação ELU, ela governa cada extremo disponível. O esforço da tabela é uma **solicitação**. A verificação da resistência da barra depende de perfil, material, ligações e condições de estabilidade.
 
 ## 6. Ler deslocamentos e deformada
 

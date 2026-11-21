@@ -30,6 +30,13 @@ def write_project(path: Path|str, project: dict) -> None:
     temp.replace(p)
 
 
+def blank_project():
+    return {'schema': 'poe-truss-python/v1', 'name': '', 'geometry': {},
+            'material': {'E_MPa': 200000}, 'sections': {},
+            'model_override': {'nodes': [], 'members': [], 'supports': []},
+            'load_patterns': [], 'load_cases': [], 'combinations': []}
+
+
 class Session:
     def __init__(self, project=None, catalog=None):
         self.catalog=catalog or load_catalog(CATALOG)
@@ -47,6 +54,8 @@ class Session:
         return self.model
 
     def calculate(self):
+        if not self.model.members:
+            raise ValueError('Crie ou importe a geometria antes de calcular.')
         self.result=run_project(self.project,self.catalog)
         self.calculated_revision=self.revision
         return self.result

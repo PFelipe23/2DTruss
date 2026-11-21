@@ -43,26 +43,22 @@ class NodeItem(QGraphicsEllipseItem):
             tip += f'\nTravamento fora do plano · {state} · {restraint["reference"]}'
         self.setToolTip(tip)
 
-    def boundingRect(self):
-        rect = super().boundingRect()
-        return rect.adjusted(0, -5, 5, 0) if getattr(self, 'restraint', None) else rect
-
     def paint(self, painter, option, widget=None):
-        if not self.isSelected():
-            super().paint(painter, option, widget)
-        else:
-            painter.save()
-            painter.setPen(self.pen())
-            painter.setBrush(QColor('#BCE1F3'))
-            painter.drawEllipse(self.rect())
-            painter.restore()
+        painter.save()
+        painter.setPen(self.pen())
         if self.restraint:
-            confirmed = self.restraint['confirmed']
-            painter.save()
-            painter.setPen(QPen(QColor('#67449B' if confirmed else '#945719'), 1))
-            painter.setBrush(QColor('#67449B' if confirmed else '#FFF1C2'))
-            painter.drawRoundedRect(QRectF(4, -10, 5, 5), 1, 1)
-            painter.restore()
+            color = '#67449B' if self.restraint['confirmed'] else '#C17B25'
+        elif self.isSelected():
+            color = '#BCE1F3'
+        else:
+            color = self.brush().color()
+        painter.setBrush(QBrush(QColor(color)))
+        painter.drawEllipse(self.rect())
+        if self.isSelected() and self.restraint:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor('#F9BF58'), 2))
+            painter.drawEllipse(self.rect().adjusted(1, 1, -1, -1))
+        painter.restore()
 
 
 class MemberItem(QGraphicsLineItem):
@@ -88,7 +84,7 @@ class MemberItem(QGraphicsLineItem):
                 color = '#91A4B4'
         pen=QPen(QColor(color), width);pen.setCosmetic(True)
         self.setPen(pen)  # largura cosmética em qualquer zoom
-        description = f'{m.id} | {m.group} | {m.profile}'
+        description = f'{m.label} | {m.group} | {m.profile}'
         if extremes is not None:
             description += '\n' + '\n'.join(f'{key} {value}' for key, value in envelope_details(extremes, units))
         elif force is not None:
@@ -162,9 +158,9 @@ class ForceVectorItem(QGraphicsPathItem):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
         x, y = ('Rx', 'Ry') if reaction else ('Fx', 'Fy')
-        self.setToolTip(f'{node} · {x} {units.force_text(fx, signed=True, load=True)} · '
-                        f'{y} {units.force_text(fy, signed=True, load=True)}')
-        self.label = BoxedLabel(units.force_text(magnitude, load=True), color, self)
+        self.setToolTip(f'{node} · {x} {units.force_text(fx, signed=True)} · '
+                        f'{y} {units.force_text(fy, signed=True)}')
+        self.label = BoxedLabel(units.force_text(magnitude), color, self)
 
     def paint(self, painter, option, widget=None):
         if self.isSelected():
@@ -215,9 +211,10 @@ class AnchoredLabel(BoxedLabel):
 class EnvelopeLabel(AnchoredLabel):
     """Uma caixa por barra, com os dois extremos em linhas independentes."""
 
-    def __init__(self, member, values, details, anchor, *, peak=False):
+    def __init__(self, member, values, details, anchor, *, peak=False, name=None):
         super().__init__('\n'.join(values), anchor, False, '#647C8E', bold=True)
         self.member_id = member
+        self.member_label = name or member
         self.details = details
         self.values = values
         self.peak = peak
@@ -248,7 +245,7 @@ class EnvelopeLabel(AnchoredLabel):
         popup.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         layout = QVBoxLayout(popup)
         layout.setContentsMargins(10, 7, 10, 8)
-        title = QLabel(f'Barra {self.member_id}')
+        title = QLabel(f'Barra {self.member_label}')
         title.setTextFormat(Qt.TextFormat.PlainText)
         title.setObjectName('envelopeTitle')
         layout.addWidget(title)
@@ -322,7 +319,7 @@ class TrussView(QGraphicsView):
         self.units = DEFAULT_UNITS
         self.show_ids=False;self.show_efforts=False;self.show_forces=False
         self.member_id_groups = set()
-        self.show_load_values = False
+        self.show_load_values = True
         self._force_items = []
         self._support_items = set()
         self._identifiers = []
@@ -481,7 +478,7 @@ class TrussView(QGraphicsView):
                 self._add_identifier(node['id'],item.pos(),node=True)
         for member in model.members:
             if member.group in self.member_id_groups:
-                self._add_identifier(member.id, (self._pos[member.i] + self._pos[member.j]) / 2, node=False)
+                self._add_identifier(member.label, (self._pos[member.i] + self._pos[member.j]) / 2, node=False)
         for nid, (ux, uy) in model.supports.items():
             if ux or uy:
                 symbol = support_symbol(self._pos[nid], ux, uy)
@@ -517,7 +514,7 @@ class TrussView(QGraphicsView):
                 peak = (tensile_peak > .0001 and isclose(entry['max_tension_n'], tensile_peak)
                         or compression_peak < -.0001 and isclose(entry['max_compression_n'], compression_peak))
                 label = EnvelopeLabel(member.id, envelope_values(entry, self.units, unit=False),
-                                      envelope_details(entry, self.units), mid, peak=peak)
+                                      envelope_details(entry, self.units), mid, peak=peak, name=member.label)
             else:
                 axial = force[member.id]
                 label = AnchoredLabel(self.units.force_text(axial, signed=True, unit=False),
@@ -625,7 +622,7 @@ class TrussView(QGraphicsView):
             self._reaction_items.append(arrow)
             item = self._nodes[node]
             item.setToolTip(f'{item.toolTip()}\n{arrow.toolTip()}')
-            text = ' · '.join(f'{axis} {self.units.force_text(value, signed=True, load=True)}'
+            text = ' · '.join(f'{axis} {self.units.force_text(value, signed=True)}'
                               for axis, value in (('Rx', fx), ('Ry', fy)) if abs(value) > 1e-7)
             arrow.label.setText(text)
 
@@ -676,11 +673,10 @@ class TrussView(QGraphicsView):
                 continue
             bounds = label.boundingRect()
             left = shaft.center().x() - bounds.width() / 2
-            if arrow.reaction:
-                left = max(viewport.left() + 4, min(left, viewport.right() - bounds.width() - 4))
+            left = max(viewport.left() + 4, min(left, viewport.right() - bounds.width() - 4))
             top = shaft.bottom() + 5 if arrow.reaction else shaft.top() - bounds.height() - 4
             direction = 1 if arrow.reaction else -1
-            for level in (0, 1):
+            for level in range(5):
                 position = QPointF(left, top + direction * level * (bounds.height() + 3))
                 candidate = QRectF(position, bounds.size()).adjusted(-3, -1, 3, 1).toAlignedRect()
                 if viewport.contains(candidate) and not occupied.intersects(candidate):

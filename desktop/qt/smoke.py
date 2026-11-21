@@ -6,9 +6,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QColorDialog, QFileDialog, QInputDialog, QListView, QMessageBox
 
-from desktop.bridge import ROOT, load_project, write_project
+from desktop.bridge import ROOT, Session, blank_project, load_project, write_project
 from desktop.cad_io import load_cad
-from poe_truss.roof_wizard import analyze_bracing, roof_alternatives
+from poe_truss.roof_wizard import chord_bracing_planes, chord_bracing_project, roof_alternatives
 from .app import DesktopApp
 from .roof_wizard import RoofWizard
 from .ui_theme import workspace_application
@@ -68,18 +68,21 @@ def run():
 
         example = load_project(ROOT / 'examples' / 'manual_pratt_16m.json')
         wizard = RoofWizard(window, example, window.session.catalog)
-        wizard.loads_page.roof_mass.setValue(8)
         roof = wizard.roof()
         alternatives = roof_alternatives(roof, window.session.catalog, height_min=1.1, height_max=1.1, ratio=250)
         candidate = alternatives['candidates'][0]
         if not candidate['purlin_ok']:
             raise RuntimeError('O assistente portátil não encontrou a modulação de referência')
         roof['geometry'].update(panels=candidate['panels'], height_m=candidate['height_m'])
-        planes = analyze_bracing(roof, window.session.catalog, {
-            'panels': candidate['panels'], 'stations': ['B00'], 'bays': 1,
-            'area_mm2': 1000., 'force_kn': 1., 'reference': 'Teste do pacote portátil',
+        plans = chord_bracing_planes(roof, window.session.catalog)
+        if len(plans) != 4:
+            raise RuntimeError('O assistente portátil não gerou os quatro planos')
+        plane = chord_bracing_project(roof, 'BS-E', plans['BS-E'], {
+            'bays': 2, 'area_mm2': 1000., 'diameter_mm': 12.5, 'force_kn': 1.,
+            'reference': 'Teste do pacote portátil',
         })
-        if len(planes) != 1 or planes[0]['max_axial_kn'] <= 0:
+        result = Session(plane, window.session.catalog).calculate()
+        if max(result['analyses']['H_POS']['axial_n'].values()) <= 0:
             raise RuntimeError('O assistente portátil não calculou o plano de travamento')
         wizard.close()
 
@@ -90,8 +93,8 @@ def run():
                 raise RuntimeError('O projeto salvo diverge do projeto em memória')
 
         window._dirty = False
-        window.new()
-        if dialog.session is not window.session or dialog.axial() or window.session.result is not None:
+        window._replace_project(Session(blank_project(), window.session.catalog))
+        if window.session.model.nodes or dialog.session is not window.session or dialog.axial() or window.session.result is not None:
             raise RuntimeError('O novo projeto conservou o visualizador ou a análise anterior')
     finally:
         window._dirty = False

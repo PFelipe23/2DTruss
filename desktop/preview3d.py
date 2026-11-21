@@ -35,6 +35,15 @@ def camera_projection(camera: Camera):
     return transform
 
 
+def unproject(point, camera):
+    """Inverte a projeção ortográfica de uma posição com profundidade conhecida."""
+    x, y, z = point
+    a, b = radians(camera.yaw_deg), radians(camera.elevation_deg)
+    zr = y * sin(b) + z * cos(b)
+    return (x * cos(a) + zr * sin(a), z * sin(b) - y * cos(b),
+            zr * cos(a) - x * sin(a))
+
+
 def member_prism(node_a,node_b, thickness=60., depth=160.):
     """8 pontos de volume ao redor do eixo real XY (somente visualização)."""
     x1,y1=node_a; x2,y2=node_b

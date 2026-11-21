@@ -1,6 +1,7 @@
 """Seletor de seções compartilhado pelas vistas 2D e 3D."""
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtWidgets import QComboBox, QFormLayout, QLabel, QSpinBox, QWidget
+from PySide6.QtWidgets import  QFormLayout, QLabel, QSpinBox, QWidget
+from .ui_theme import WorkspaceComboBox as QComboBox
 from .display_units import format_number
 
 

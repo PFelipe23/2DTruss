@@ -12,20 +12,21 @@ import sys
 from PySide6.QtCore import QPoint,QSettings,Qt,QSignalBlocker,QTimer
 from PySide6.QtGui import QAction,QKeySequence,QColor,QPen
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,
-    QLabel,QToolButton,QComboBox,QDoubleSpinBox,QSpinBox,QSplitter,
+    QLabel,QToolButton,QDoubleSpinBox,QSpinBox,QSplitter,
     QTreeWidget,QTreeWidgetItem,QTabWidget,QFormLayout,QGroupBox,QLineEdit,QFileDialog,
     QMessageBox,QInputDialog,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,
     QDialog,QDialogButtonBox,QGraphicsView,QGraphicsScene,QFrame,QSizePolicy,
     QButtonGroup,QScrollArea,QStackedWidget,QTabBar,QMenu,QWidgetAction)
 
-from desktop.bridge import Session,load_project,write_project
+from desktop.bridge import Session,blank_project,load_project,write_project
 from desktop import editing,cad_io,workflow
 from poe_truss.export import as_csv,dimperfil_rows,integrated_report_html
 from poe_truss.loads import load_patterns
 from poe_truss.model import GROUPS
-from poe_truss.roof_wizard import bracing_plane, bracing_stations
+from poe_truss.roof_wizard import bracing_plane, bracing_stations, chord_bracing_planes, chord_bracing_project
 from poe_truss.units import FORCE_TO_N
 from poe_truss.version import APP_NAME, TAG
+from .ui_theme import WorkspaceComboBox as QComboBox
 from .action_icons import action_icon, IconButton as _button
 from .display_units import DisplayUnits, LOCALE, LoadField, UnitsDialog, format_number
 from .manual_resistance_dialog import ManualResistanceDialog
@@ -215,6 +216,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.force_summary.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         force_layout.addWidget(self.force_summary, 1)
         self.force_values = _button('Valores', self.view.set_load_values, 'ids', checkable=True)
+        self.force_values.setChecked(True)
         self.force_values.setToolTip('Exibir a magnitude das resultantes nodais')
         force_layout.addWidget(self.force_values)
         self.force_bar.hide()
@@ -782,7 +784,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def set_units(self, units):
         if self.units == units:
             return
-        default_load = self.load_table.currentRow() < 0 and not (self.fx.value() or self.fy.value())
+        force_scale = FORCE_TO_N[self.units.force] / FORCE_TO_N[units.force]
+        load_values = [field.submitted_value() * force_scale for field in (self.fx, self.fy)]
         editing_node = self.node_properties.isVisibleTo(self)
         if editing_node:
             coordinates = self._node_position()
@@ -794,8 +797,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._update_unit_summary()
         self._fit_toolbar(self.width())
         self.snap.set_label(f'Snap {units.length_text(self.view.grid_mm)}')
-        if default_load:
-            self.force_unit.setCurrentText(units.force)
+        self._sync_geometry_lengths()
+        self._update_load_unit_labels()
+        for field, value in zip((self.fx, self.fy), load_values):
+            field.set_stored_value(value)
         if self._cursor_xy is not None:
             self._show_coordinates(*self._cursor_xy)
         else:
@@ -813,7 +818,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if self.result_table.currentRow() >= 0 and self.session.result:
             item = self.result_table.item(self.result_table.currentRow(), 0)
             if item:
-                self._show_result_detail(item.text())
+                self._show_result_detail(item.data(Qt.ItemDataRole.UserRole))
         self._sync_view3d()
 
     def _show_force_summary(self, forces, error):
@@ -824,8 +829,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             return
         active = [(fx, fy) for fx, fy in forces.values() if hypot(fx, fy) > 1e-8]
         if active:
-            fx = self.units.force_text(fsum(x for x, _ in active), signed=True, unit=False, load=True)
-            fy = self.units.force_text(fsum(y for _, y in active), signed=True, load=True)
+            fx = self.units.force_text(fsum(x for x, _ in active), signed=True, unit=False)
+            fy = self.units.force_text(fsum(y for _, y in active), signed=True)
             self.force_summary.setText(
                 f'{self.case_id} · {len(active)} nós com carga · ΣFx {fx} · ΣFy {fy}'
             )
@@ -840,20 +845,27 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         tab=QWidget();col=QVBoxLayout(tab)
         self.geometry_box=QGroupBox('Geometria paramétrica');form=QFormLayout(self.geometry_box)
         self.geom_fields={}
-        definitions=[('span_m','Vão (m)',16.,.1,500.,5,.25),('frame_spacing_m','Entre pórticos (m)',5.,.1,100.,5,.25),
-            ('height_m','Altura (m)',1.,.05,50.,5,.05),('rise_m','Desnível (m)',.5,0.,30.,5,.05)]
+        self.geometry_labels={}
+        self.geometry_ranges={}
+        definitions=[('span_m','Vão',16.,.1,500.,5,.25),('frame_spacing_m','Entre pórticos',5.,.1,100.,5,.25),
+            ('height_m','Altura',1.,.05,50.,5,.05),('rise_m','Desnível',.5,0.,30.,5,.05)]
         for key,label,default,minimum,maximum,decimals,step in definitions:
             widget=_spin(default,minimum,maximum,decimals,step);self.geom_fields[key]=widget
             widget.setKeyboardTracking(False)
-            widget.valueChanged.connect(self.change_geometry);form.addRow(label,widget)
+            widget.valueChanged.connect(lambda value, key=key: self.change_geometry(key))
+            caption = QLabel(label)
+            caption.setBuddy(widget)
+            form.addRow(caption, widget)
+            self.geometry_labels[key] = (caption, label)
+            self.geometry_ranges[key] = (minimum, maximum, step)
         self.panels=QSpinBox();self.panels.setRange(2,40)
         self.panels.setKeyboardTracking(False)
-        self.panels.valueChanged.connect(self.change_geometry)
+        self.panels.valueChanged.connect(lambda: self.change_geometry('panels'))
         form.addRow('Painéis',self.panels)
         self.shape=QComboBox();self.shape.addItems(['parallel','single','gable','trapezoid'])
-        self.shape.currentTextChanged.connect(self.change_geometry);form.addRow('Forma',self.shape)
+        self.shape.currentTextChanged.connect(lambda: self.change_geometry('roof_shape'));form.addRow('Forma',self.shape)
         self.topology=QComboBox();self.topology.addItems(['Pratt','Howe','Warren'])
-        self.topology.currentTextChanged.connect(self.change_geometry);form.addRow('Triangulação',self.topology)
+        self.topology.currentTextChanged.connect(lambda: self.change_geometry('truss_type'));form.addRow('Triangulação',self.topology)
         col.addWidget(self.geometry_box)
         self.cad_notice=QLabel('Edição CAD avançada cria modelo explícito.\n'
             'Voltar ao paramétrico descarta a geometria manual, após confirmação.')
@@ -928,10 +940,12 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.fx.valueChanged.connect(self._refresh_load_controls)
         self.fy.valueChanged.connect(self._refresh_load_controls)
         components = QHBoxLayout()
+        self.load_axis_labels = []
         for title, spin in (('Fx (+ direita)', self.fx), ('Fy (+ acima)', self.fy)):
             component = QVBoxLayout()
             component.setSpacing(3)
             label = QLabel(title)
+            self.load_axis_labels.append((label, title))
             label.setBuddy(spin)
             spin.setMinimumWidth(0)
             spin.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -939,10 +953,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             component.addWidget(spin)
             components.addLayout(component)
         fields.addRow(components)
-        self.force_unit = QComboBox()
-        self.force_unit.addItems(['kN', 'N', 'kgf', 'tf'])
-        self.force_unit.setCurrentText(self.units.force)
-        fields.addRow('Unidade', self.force_unit)
+        self._update_load_unit_labels()
         self.commit_load = _button('Adicionar', self.add_load, 'add')
         fields.addRow(self.commit_load)
         self.batch_load = _button('Aplicar aos nós selecionados', self.add_load_batch, 'group')
@@ -1073,7 +1084,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 node=QTreeWidgetItem([n.id]);node.setData(0,Qt.ItemDataRole.UserRole,('node',n.id));nodes_root.addChild(node)
                 self._model_items['node', n.id] = node
             for m in model.members:
-                item=QTreeWidgetItem([f'{m.id} · {m.group}']);item.setData(0,Qt.ItemDataRole.UserRole,('member',m.id));members_root.addChild(item)
+                item=QTreeWidgetItem([f'{m.label} · {m.group}']);item.setData(0,Qt.ItemDataRole.UserRole,('member',m.id));members_root.addChild(item)
                 self._model_items['member', m.id] = item
             for n in project.get('cad_drafts',[]):
                 item=QTreeWidgetItem([n['id']+' (rascunho)']);item.setData(0,Qt.ItemDataRole.UserRole,('node',n['id']));drafts_root.addChild(item)
@@ -1092,8 +1103,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.cases.blockSignals(False)
             self._populate_load_choices()
             geo=project.get('geometry',{})
-            for key,field in self.geom_fields.items():
-                field.blockSignals(True);field.setValue(float(geo.get(key,0)));field.blockSignals(False)
+            self._sync_geometry_lengths()
             self.panels.blockSignals(True);self.panels.setValue(int(geo.get('panels',2)));self.panels.blockSignals(False)
             for widget,key in ((self.shape,'roof_shape'),(self.topology,'truss_type')):
                 widget.blockSignals(True)
@@ -1102,19 +1112,23 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                 widget.blockSignals(False)
             explicit='model_override' in project
             origin = project.get('bracing_origin')
-            self.geometry_box.setVisible(not origin)
+            blank = explicit and not model.members and not geo.get('span_m')
+            self.geometry_box.setVisible(not origin and not blank)
             self.geometry_box.setEnabled(not explicit)
             self.cad_notice.setVisible(not origin)
-            self.revert_button.setVisible(not origin)
+            self.cad_notice.setText('Projeto em branco. Abra o assistente, importe um DXF ou crie nós e barras.'
+                                    if blank else 'Edição CAD avançada cria modelo explícito.\n'
+                                    'Voltar ao paramétrico descarta a geometria manual, após confirmação.')
+            self.revert_button.setVisible(not origin and not blank and bool(geo.get('span_m')))
             self.revert_button.setEnabled(explicit)
             self.bracing_info.setVisible(bool(origin))
             if origin:
                 station = origin.get('station', {})
                 self.bracing_info.setText(
-                    f"Plano de travamento {station.get('lower', '—')} / {station.get('upper', '—')}\n\n"
+                    f"Plano de travamento {station.get('lower', '—')}\n\n"
                     f"Largura no plano: {self.units.length_text(model.span_mm)}\n"
                     f"Espaçamento nominal: {self.units.length_text(model.frame_spacing_mm)}\n"
-                    f"Altura de origem: {self.units.length_text(station.get('height_mm', 0))}\n\n"
+                    f"Dimensão transversal: {self.units.length_text(station.get('height_mm', 0))}\n\n"
                     f"{origin.get('scheme', '')}\n\nReferência: {origin.get('reference', '')}"
                 )
             self.view.render(self.session,self.case_id,fit=fit)
@@ -1235,9 +1249,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             m=next((m for m in self.session.model.members if m.id==id),None)
             if m:
                 length = self.units.length_text(self.session.model.member_length(m))
-                self.member_info.setText(f'{m.id} · {m.i} → {m.j}\n{m.profile}\nL={length}')
+                self.member_info.setText(f'{m.label} · {m.i} → {m.j}\n{m.profile}\nL={length}')
                 self.group.setCurrentText(m.group)
-                self.selection_label.setText(f'Barra {id}' if len(selected) == 1 else
+                self.selection_label.setText(f'Barra {m.label}' if len(selected) == 1 else
                                              f'{len(selected)} elementos selecionados')
                 if show_properties:self.info_tabs.setCurrentIndex(1)
 
@@ -1306,7 +1320,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             elif kind == 'member':
                 member = next((item for item in model.members if item.id == identifier), None)
                 if member:
-                    values = [('ID', identifier), ('Nós', f'{member.i} → {member.j}'),
+                    values = [('ID', member.label), ('Nós', f'{member.i} → {member.j}'),
                               ('Grupo', member.group), ('Perfil', member.profile),
                               ('Comprimento', self.units.length_text(model.member_length(member)))]
                     force = analysis.get('axial_n', {}).get(identifier)
@@ -1350,7 +1364,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self._apply(p,'Coordenadas alteradas')
 
     def delete_selected(self):
-        selected=self.view.selected_ids() or self._selected
+        selected = self.view.selected_ids()
         nodes=[id for kind,id in selected if kind=='node']
         members=[id for kind,id in selected if kind=='member']
         if not nodes and not members:return
@@ -1415,12 +1429,29 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             baseline.append((spin.value(), value))
         self._node_display_values = tuple(baseline)
 
-    def change_geometry(self,*_):
-        if self._refreshing or 'model_override' in self.session.project:return
-        p=deepcopy(self.session.project);geo=p['geometry']
-        for key,widget in self.geom_fields.items():geo[key]=widget.value()
-        geo['panels']=self.panels.value();geo['roof_shape']=self.shape.currentText()
-        geo['truss_type']=self.topology.currentText()
+    def _sync_geometry_lengths(self):
+        scale = 1000 / self.units.length_scale
+        geometry = self.session.project.get('geometry', {})
+        for key, field in self.geom_fields.items():
+            low, high, step = self.geometry_ranges[key]
+            with QSignalBlocker(field):
+                field.setDecimals(self.units.length_precision)
+                field.setRange(low * scale, high * scale)
+                field.setSingleStep(step * scale)
+                field.setValue(float(geometry.get(key, low)) * scale)
+            label, caption = self.geometry_labels[key]
+            label.setText(f'{caption} [{self.units.length}]')
+
+    def change_geometry(self, key):
+        if self._refreshing or 'model_override' in self.session.project:
+            return
+        p = deepcopy(self.session.project)
+        geo = p['geometry']
+        if key in self.geom_fields:
+            geo[key] = self.geom_fields[key].value() * self.units.length_scale / 1000
+        else:
+            geo[key] = {'panels': self.panels.value, 'roof_shape': self.shape.currentText,
+                        'truss_type': self.topology.currentText}[key]()
         old = self.session.project['geometry']
         if geo != old:
             if any(geo[key] != old.get(key) for key in ('panels', 'truss_type')) and any(
@@ -1487,13 +1518,16 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             self.load_node.addItems([node.id for node in self.session.model.nodes])
             self.load_node.setCurrentIndex(self.load_node.findText(node))
 
+    def _update_load_unit_labels(self):
+        for label, caption in self.load_axis_labels:
+            label.setText(f'{caption} [{self.units.force}]')
+
     def _reset_load_fields(self):
         with QSignalBlocker(self.load_case), QSignalBlocker(self.load_node):
             self.load_case.setCurrentIndex(-1)
             self.load_node.setCurrentIndex(-1)
         self.fx.set_stored_value(0)
         self.fy.set_stored_value(0)
-        self.force_unit.setCurrentText(self.units.force)
 
     def _load_case_changed(self, case):
         self.refresh_load_table()
@@ -1554,9 +1588,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             load = rows[row]
             node = str(load['node'])
             self.load_node.setCurrentIndex(self.load_node.findText(node))
-            self.fx.set_stored_value(float(load.get('fx', 0)))
-            self.fy.set_stored_value(float(load.get('fy', 0)))
-            self.force_unit.setCurrentText(load.get('force_unit', case.get('force_unit', 'kgf')))
+            source_unit = load.get('force_unit', case.get('force_unit', 'kgf'))
+            scale = FORCE_TO_N[source_unit] / FORCE_TO_N[self.units.force]
+            self.fx.set_stored_value(float(load.get('fx', 0)) * scale)
+            self.fy.set_stored_value(float(load.get('fy', 0)) * scale)
             selection = [('node', node)]
             self._set_canvas_selection(selection)
             self._update_selection(self.view.selected_ids(), show_properties=False)
@@ -1573,11 +1608,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 
     def _save_nodal_loads(self, nodes, *, index=None):
         case = self.load_case.currentText()
-        unit = self.force_unit.currentText()
-        source = self._active_nodal_case()
-        original = source['loads'][index] if index is not None else {}
-        preserve = index is not None and unit == original.get('force_unit', source.get('force_unit', 'kgf'))
-        fx, fy = (field.submitted_value() if preserve else field.value() for field in (self.fx, self.fy))
+        unit = self.units.force
+        fx, fy = (field.submitted_value() for field in (self.fx, self.fy))
         try:
             updated = workflow.update_nodal_loads(
                 self.session.project, self.session.model, case, nodes,
@@ -1677,6 +1709,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             axial_force = force(m.id)
             for j,val in enumerate(self._result_row(m, axial_force)):
                 item=QTableWidgetItem(str(val))
+                if j == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, m.id)
+                    item.setText(m.label)
                 if j == 2:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     if axial_force:
@@ -1691,7 +1726,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if row<0:return
         item=self.result_table.item(row,0)
         if not item:return
-        mid=item.text()
+        mid=item.data(Qt.ItemDataRole.UserRole)
         selection = [('member', mid)]
         self._set_canvas_selection(selection)
         self._update_selection(selection, show_properties=False)
@@ -1700,7 +1735,8 @@ class DesktopApp(WorkflowMixin,QMainWindow):
     def _show_result_detail(self, member_id):
         envelope = self.session.result['envelope'][member_id]
         lines = [f'{title} máxima  {value}' for title, value in envelope_details(envelope, self.units)]
-        self.critical_detail.setText('\n'.join([member_id, *lines]))
+        member = next((m for m in self.session.model.members if m.id == member_id), None)
+        self.critical_detail.setText('\n'.join([member.label if member else member_id, *lines]))
 
     def _set_overlay(self, flag, visible):
         if visible and flag in ('show_deformed', 'show_efforts') and not self.mode_3d.isChecked():
@@ -1750,7 +1786,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             template['sections'] = source['sections']
         template['material'] = source.get('material', template['material'])
         template['roofing'] = source.get('roofing', {})
-        wizard = RoofWizard(self, template, self.session.catalog)
+        wizard = RoofWizard(self, template, self.session.catalog, self.units)
         if wizard.exec() != QDialog.DialogCode.Accepted:
             return
         if not self._maybe_save():
@@ -1763,9 +1799,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if self.mode_3d.isChecked():
             self.set_3d_visible(False)
         self._replace_project(session, dirty=True)
-        self.cases.setCurrentText('REF_GRAV')
-        self._set_overlay('show_forces', True)
-        self.status('Cobertura gerada. Use F5 para calcular e Ctrl+S para salvar.')
+        self.status('Cobertura gerada. Cadastre as cargas do projeto antes de calcular.')
 
     def open_transverse_bracing(self):
         project = self.session.project
@@ -1775,17 +1809,24 @@ class DesktopApp(WorkflowMixin,QMainWindow):
                                     'Gere um estudo de travamento com o Assistente de cobertura.')
             return
         try:
-            stations = bracing_stations(project, self.session.catalog)
-            selected = specification['stations']
-            if (specification['panels'] != project['geometry']['panels']
-                    or not selected or set(selected) - stations.keys()):
-                raise ValueError('A geometria mudou. Revise as estações no Assistente de cobertura.')
+            chord_planes = specification.get('kind') == 'chord_planes'
+            if chord_planes:
+                stations = chord_bracing_planes(project, self.session.catalog)
+                selected = list(stations)
+            else:
+                stations = bracing_stations(project, self.session.catalog)
+                selected = specification['stations']
+                if (specification['panels'] != project['geometry']['panels']
+                        or not selected or set(selected) - stations.keys()):
+                    raise ValueError('A geometria mudou. Revise as estações no Assistente de cobertura.')
             choice, accepted = QInputDialog.getItem(
-                self, 'Abrir plano de travamento', 'Estação no vão da treliça', selected, 0, False,
+                self, 'Abrir plano de travamento', 'Plano ou estação', selected, 0, False,
             )
             if not accepted or not self._maybe_save():
                 return
-            session = Session(bracing_plane(project, stations[choice], specification), self.session.catalog)
+            plane = (chord_bracing_project(project, choice, stations[choice], specification) if chord_planes
+                     else bracing_plane(project, stations[choice], specification))
+            session = Session(plane, self.session.catalog)
             session.calculate()
         except (KeyError, TypeError, ValueError, ArithmeticError) as error:
             QMessageBox.warning(self, 'Planos de travamento', str(error))
@@ -1801,8 +1842,13 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         self.status('Plano isolado calculado. Use Ctrl+S para salvar como projeto independente.')
 
     def new(self):
-        if self._maybe_save():
-            self._replace_project(Session())
+        if not self._maybe_save():
+            return
+        self._replace_project(Session(blank_project(), self.session.catalog))
+        self.choose_tool('select')
+        choice = QMessageBox.question(self, 'Novo projeto', 'Abrir o Assistente de cobertura?')
+        if choice == QMessageBox.StandardButton.Yes:
+            self.open_roof_wizard()
 
     def open(self):
         if not self._maybe_save():
@@ -1970,7 +2016,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
         if item is None:
             return
         kind = 'node' if self.result_views.currentIndex() == 1 else 'member'
-        selection = [(kind, item.text())]
+        selection = [(kind, item.data(Qt.ItemDataRole.UserRole) or item.text())]
         self._set_canvas_selection(selection)
         self._update_selection(selection, show_properties=False)
 
@@ -1983,9 +2029,10 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             if len(self._selected) != 1 or self._selected[0][0] != kind:
                 return
             identifier = self._selected[0][1]
-            for item in table.findItems(identifier, Qt.MatchFlag.MatchExactly):
-                if item.column() == 0:
-                    table.selectRow(item.row())
+            for row in range(table.rowCount()):
+                item = table.item(row, 0)
+                if item and (item.data(Qt.ItemDataRole.UserRole) or item.text()) == identifier:
+                    table.selectRow(row)
                     break
 
     def refresh_quick_table(self):
@@ -1993,6 +2040,7 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             return
         deform = self.result_views.currentIndex() == 1
         is_envelope = not deform and self.view.show_envelope
+        labels = {member.id: member.label for member in self.session.model.members}
         result = self.session.result or {}
         analysis = result.get('analyses', {}).get(self.case_id)
         scope = self.view.envelope_scope
@@ -2048,6 +2096,9 @@ class DesktopApp(WorkflowMixin,QMainWindow):
             for row, (values, color) in enumerate(records):
                 for column, value in enumerate(values):
                     cell = QTableWidgetItem(str(value))
+                    if column == 0 and not deform:
+                        cell.setData(Qt.ItemDataRole.UserRole, value)
+                        cell.setText(labels.get(value, value))
                     if is_envelope and column >= 2:
                         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                         cell.setForeground(QColor((TENS, COMP)[column - 2] if value != '—' else '#657989'))
