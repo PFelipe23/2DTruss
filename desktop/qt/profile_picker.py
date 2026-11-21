@@ -1,6 +1,7 @@
 """Seletor de seções compartilhado pelas vistas 2D e 3D."""
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtWidgets import QComboBox, QFormLayout, QSpinBox, QWidget
+from PySide6.QtWidgets import QComboBox, QFormLayout, QLabel, QSpinBox, QWidget
+from .display_units import format_number
 
 
 class ProfilePicker(QWidget):
@@ -20,6 +21,10 @@ class ProfilePicker(QWidget):
         layout.addRow('Biblioteca', self.family)
         layout.addRow('Perfil', self.profile)
         layout.addRow('Quantidade', self.count)
+        self.details = QLabel()
+        self.details.setWordWrap(True)
+        self.details.setObjectName('profileDetails')
+        layout.addRow(self.details)
         self.family.currentTextChanged.connect(self._filter)
         self.profile.activated.connect(self._select)
         self.count.valueChanged.connect(self._emit)
@@ -47,6 +52,7 @@ class ProfilePicker(QWidget):
                 self.profile.setItemData(index, f'{profile.origin}\n{profile.quality}', Qt.ItemDataRole.ToolTipRole)
             self.profile.setCurrentIndex(self.profile.findText(selected))
         self.count.setEnabled(self.profile.currentIndex() >= 0)
+        self._describe()
 
     def _select(self, _index):
         with QSignalBlocker(self.count):
@@ -54,7 +60,19 @@ class ProfilePicker(QWidget):
         self.count.setEnabled(True)
         self._emit()
 
+    def _describe(self):
+        profile = self.catalog.get(self.profile.currentText())
+        self.details.setVisible(profile is not None)
+        if profile is None:
+            return
+        self.details.setText(
+            f'{profile.name}\nÁrea por perfil   {format_number(profile.area_mm2, 2)} mm²\n'
+            f'Massa por perfil   {format_number(profile.mass_kg_m, 3)} kg/m'
+        )
+        self.details.setToolTip(f'{profile.origin}\n{profile.quality}')
+
     def _emit(self, *_):
+        self._describe()
         name = self.profile.currentText()
         if name:
             self.changed.emit(name, self.count.value())

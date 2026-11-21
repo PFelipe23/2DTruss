@@ -15,6 +15,8 @@ py -3 2DTruss.pyw
 
 No Windows, também pode executar `INSTALAR_DEPENDENCIAS_USUARIO.bat` e `INICIAR_DESKTOP.bat`. Para gerar o executável portátil com PyInstaller, siga o [guia desktop](LEIA-ME_DESKTOP.md#gerar-o-executável-windows).
 
+O [manual do usuário](docs/MANUAL_DO_USUARIO.md) acompanha uma treliça Pratt de 16 m da preparação do modelo à leitura da envoltória ELU e da deformada ELS.
+
 ## Testes
 
 ```bash

@@ -25,6 +25,34 @@ ROOF=json.loads((ROOT/'examples/cobertura_duas_aguas.json').read_text())
 
 
 class AnalyticTests(unittest.TestCase):
+    def test_uniform_member_load_has_optional_simply_supported_flexure(self):
+        project = json.loads((ROOT / 'examples/FTool_A02_trelica_triangular.json').read_text(encoding='utf-8'))
+        base = {'kind': 'member_line', 'value': 2, 'force_unit': 'kN',
+                'member_ids': ['AB'], 'direction': 'down', 'basis': 'roof_surface'}
+        project['load_patterns'] = [
+            dict(base, id='W_N', member_mode='nodal'),
+            dict(base, id='W_F', member_mode='flexure'),
+            dict(base, id='W_U', member_mode='flexure', direction='up', value=1),
+        ]
+        project['load_cases'] = [
+            {'id': 'N', 'kind': 'static', 'patterns': {'W_N': 1}},
+            {'id': 'F', 'kind': 'static', 'patterns': {'W_F': 1}},
+            {'id': 'U', 'kind': 'static', 'patterns': {'W_U': 1}},
+        ]
+        project['combinations'] = [{'id': 'ENV', 'factors': {'F': 1.5, 'U': -1}}]
+        analyses = run_project(project, load_catalog(ROOT/'catalogo_perfis.csv'))['analyses']
+        assert analyses['N']['loads'] == analyses['F']['loads']
+        assert analyses['N']['reactions'] == analyses['F']['reactions']
+        assert 'member_flexure' not in analyses['N']
+        assert analyses['F']['loads']['A']['fy_n'] == -4000
+        assert analyses['F']['reactions']['A']['fy_n'] == 4000
+        assert analyses['F']['member_flexure']['AB'] == {
+            'shear_i_n': 4000, 'shear_j_n': -4000, 'moment_mid_nmm': 4_000_000,
+        }
+        assert analyses['ENV']['member_flexure']['AB'] == {
+            'shear_i_n': 8000, 'shear_j_n': -8000, 'moment_mid_nmm': 8_000_000,
+        }
+
     def test_classified_envelopes_keep_manual_combinations_out(self):
         project = copy.deepcopy(TRIANGLE)
         project['combinations'] = [

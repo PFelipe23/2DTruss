@@ -17,7 +17,8 @@ class WorkspaceCheckBox(QCheckBox):
         with QPainter(self) as painter:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             edge = '#26729B' if enabled and (checked or self.underMouse()) else '#6A8295' if enabled else '#A8B6C1'
-            painter.setBrush(QColor('#FFFFFF' if enabled else '#F1F5F7'))
+            painter.fillRect(indicator, QColor('#FFFFFF' if enabled else '#F1F5F7'))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor(edge), 1))
             painter.drawRoundedRect(QRectF(indicator).adjusted(.5, .5, -.5, -.5), 2, 2)
             if checked:
@@ -102,6 +103,9 @@ QFrame#statusBar {background:#F3F6F9;border-top:1px solid #D3DEE7;}
 QLabel#coordinates {color:#344B60;font-family:"Consolas";font-size:9pt;}
 QWidget#taskPanel {background:#FFFFFF;}
 QWidget#inspectorPage {background:#FFFFFF;}
+QLabel#profileDetails {background:#F3F7FA;border:1px solid #D5E4F0;border-radius:4px;padding:5px;}
+QLabel#groupLegend {background:#F1F6FA;border:1px solid #D5E4F0;border-radius:4px;padding:6px;}
+QComboBox#selectionFilter {min-height:16px;padding:2px 4px;}
 QLabel#panelHeading {font-weight:700;color:#183850;padding:4px 5px 6px;}
 QTabWidget::pane {border:0;background:#FFFFFF;}
 QTabBar::tab {background:#ECF1F5;color:#344B60;padding:5px 12px;border-bottom:2px solid transparent;}

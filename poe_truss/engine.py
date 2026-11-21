@@ -2,7 +2,8 @@
 from __future__ import annotations
 from math import isfinite
 from .model import make_model,geometry_diagnostics
-from .loads import load_patterns,resolve_case_loads,merge_forces,combination_audit
+from .loads import (load_patterns, resolve_case_loads, merge_forces, combination_audit,
+                    combine_member_transverse, member_flexure)
 from .stability import resolve_stability
 from .sections import section_properties
 from .axial import axial_screen
@@ -86,6 +87,13 @@ def run_project(project:dict, catalog:dict) -> dict:
     for cid,factors in combinations.items():
         analyses[cid]=solver.analyze(merge_forces(factors,raw))
         load_audit[cid]=combination_audit(cid,factors,raw)
+        transverse = combine_member_transverse(factors, load_audit)
+        if transverse:
+            load_audit[cid]['member_transverse_n'] = transverse
+    for cid, analysis in analyses.items():
+        transverse = load_audit[cid].get('member_transverse_n')
+        if transverse:
+            analysis['member_flexure'] = member_flexure(model, transverse)
     candidates=list(combinations.keys()) if combinations else list(raw.keys())
     envelope = axial_envelope(model.members, analyses, candidates)
     classified = {
@@ -104,7 +112,7 @@ def run_project(project:dict, catalog:dict) -> dict:
     camber=suggested_camber(project,model.to_dict(),analyses)
     notices=[
         'Análise linear elástica 2D, barras articuladas. Sem ELU resistente, ligações, flambagem ou estabilidade fora do plano.',
-        'Cargas transversais entre nós representadas somente por resultantes nodais; flexão local do banzo não avaliada.',
+        'As cargas entre nós entram na análise global como forças nodais; a flexão local opcional é de barra biapoiada com carga uniforme.',
         'Combinações fornecidas pelo usuário. Nenhuma conformidade automática à NBR 8681, NBR 14762 ou NBR 8800.',
         'Massa automática da treliça exclui ligações, chapas, soldas, acabamentos e acessórios.',
         'Convenção de unidades do projeto: 1 kgf = 10 N.',

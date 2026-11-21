@@ -11,7 +11,7 @@ from poe_truss.loads import load_patterns
 from poe_truss.model import GROUPS
 from poe_truss.units import FORCE_TO_N
 
-LOAD_KINDS = ('self_weight','surface','line','nodal')
+LOAD_KINDS = ('self_weight','surface','line','nodal','member_line')
 DIRECTIONS = ('down','up','outward_normal','inward_normal','right','left')
 ACTION_CLASSES = {
     'permanent': 'Permanente (G)',
@@ -115,7 +115,7 @@ def update_nodal_loads(project, model, case_id, node_ids, fx, fy, force_unit, in
 
 def update_load_case(project, case_id, *, name, kind, value=0, force_unit='kgf',
                      application='top', basis='projected', direction='down', zone='all',
-                     action_class=None):
+                     action_class=None, member_ids=(), member_mode='nodal'):
     p=deepcopy(project)
     c=next((x for x in load_patterns(p) if x['id']==case_id),None)
     if c is None:raise ValueError('Caso inexistente')
@@ -130,7 +130,14 @@ def update_load_case(project, case_id, *, name, kind, value=0, force_unit='kgf',
         if c.get('kind')=='nodal' and c.get('loads'):
             raise ValueError('Apague as cargas nodais antes de trocar o tipo de caso')
         c.clear();c.update(id=case_id,name=str(name).strip() or case_id,kind=kind)
-    if kind in ('surface','line'):
+    if kind == 'member_line':
+        if member_mode not in ('nodal', 'flexure'):
+            raise ValueError('Modo de carga de barra inválido')
+        members = list(dict.fromkeys(member_ids))
+        if _nonnegative(value, 'Intensidade') and not members:
+            raise ValueError('Selecione pelo menos uma barra de aplicação')
+        c.update(member_ids=members, member_mode=member_mode)
+    if kind in ('surface', 'line', 'member_line'):
         c.update(value=_nonnegative(value,'Intensidade'),force_unit=force_unit,
                  application=application,basis=basis,direction=direction,zone=zone)
     if kind=='nodal':c.setdefault('loads',[])
@@ -150,7 +157,8 @@ def add_load_case(project, case_id, kind='surface', *, pattern_only=False):
     p.setdefault(key,[]).append({'id':case_id,'name':case_id,'kind':kind,
         **({'loads':[]} if kind=='nodal' else {}),
         **({'value':0.,'force_unit':'kgf','application':'top','basis':'projected',
-            'direction':'down','zone':'all'} if kind in ('surface','line') else {})})
+            'direction':'down','zone':'all'} if kind in ('surface','line','member_line') else {}),
+        **({'member_ids': [], 'member_mode': 'nodal', 'basis': 'roof_surface'} if kind == 'member_line' else {})})
     return p
 
 
@@ -253,7 +261,7 @@ def project_diagnostics(project, model, result=None):
         level = 'erro' if pattern['id'] in active_patterns else 'aviso'
         if pattern.get('kind') == 'nodal' and not pattern.get('loads'):
             add(level, f'Padrão {pattern["id"]}: sem forças nodais')
-        if model.shape == 'explicit' and pattern.get('kind') in ('surface', 'line'):
+        if model.shape == 'explicit' and not model.chord_loads and pattern.get('kind') in ('surface', 'line'):
             add(level, f'Padrão {pattern["id"]}: cargas distribuídas requerem associação ao CAD')
     if not project.get('combinations'):add('aviso','Sem combinações para análise de envoltórias')
     if project.get('stability',{}).get('groups') is None:

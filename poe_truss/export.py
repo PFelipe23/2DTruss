@@ -72,6 +72,17 @@ def integrated_report_html(result:dict,project:dict,analysis_id:str)->str:
          f'<h2>Contraflecha indicativa</h2><p>Caso: {esc(str(c.get("reference_case")))}. Estado: {esc(c["state"])}. '
          f'Máxima: {c.get("max_abs_camber_mm",0):.3f} mm.</p><p>{esc(c["warning"])}</p>'
          f'<p>FTool: validação cruzada externa pendente. NBR 14762 e NBR 8800: dimensionamento resistente não comprovado.</p></section>')
+    local = result['analyses'][analysis_id].get('member_flexure', {})
+    if local:
+        rows = ''.join(
+            f'<tr><td>{escape(member)}</td><td>{values["shear_i_n"] / 1000:+.3f}</td>'
+            f'<td>{values["shear_j_n"] / 1000:+.3f}</td><td>{values["moment_mid_nmm"] / 1e6:+.3f}</td></tr>'
+            for member, values in local.items()
+        )
+        add += ('<section><h2>Cortante e momento locais</h2>'
+                '<p>Barras biapoiadas com carga uniforme, no eixo local i → j.</p>'
+                '<table><thead><tr><th>Barra</th><th>V(i) kN</th><th>V(j) kN</th>'
+                '<th>M no meio kN·m</th></tr></thead><tbody>' + rows + '</tbody></table></section>')
     if '</body>' in original:
         return original.replace('</body>',add+'</body>')
     return original.replace('</html>',add+'</html>') if '</html>' in original else original+add

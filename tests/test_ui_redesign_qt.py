@@ -11,6 +11,56 @@ HAS_QT=importlib.util.find_spec('PySide6') is not None
 
 @unittest.skipUnless(HAS_QT,'PySide6 ausente neste ambiente; teste gráfico pendente no Windows')
 class QtRedesignSmoke(unittest.TestCase):
+    def test_window_selection_filter_middle_pan_and_midpoint_split(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from desktop.qt.app import DesktopApp
+
+        app = QApplication.instance() or QApplication([])
+        window = DesktopApp()
+        window.show()
+        try:
+            app.processEvents()
+            view = window.view
+            view.configure_grid(125, 4)
+            self.assertEqual((view.grid_mm, view.grid_major), (125, 4))
+            window.selection_filter.setCurrentIndex(window.selection_filter.findData('member'))
+            member = next(iter(view._members.values()))
+            mid = view.mapFromScene(member.line().center())
+            widget = view.viewport()
+            QTest.mouseClick(widget, Qt.MouseButton.LeftButton, pos=mid + QPoint(0, 4))
+            self.assertIn(('member', member.member_id), view.selected_ids())
+
+            first, last = mid - QPoint(12, 12), mid + QPoint(12, 12)
+            def drag(start, end, button=Qt.MouseButton.LeftButton):
+                QTest.mousePress(widget, button, pos=start)
+                QTest.mouseMove(widget, end)
+                QTest.mouseRelease(widget, button, pos=end)
+
+            drag(first, last)
+            self.assertNotIn(('member', member.member_id), view.selected_ids())
+            drag(last, first)
+            self.assertIn(('member', member.member_id), view.selected_ids())
+            before_pan = view.mapToScene(widget.rect().center())
+            drag(mid, mid + QPoint(30, 20), Qt.MouseButton.MiddleButton)
+            self.assertNotEqual(before_pan, view.mapToScene(widget.rect().center()))
+            self.assertIsNone(view._pan_position)
+            self.assertEqual(view.tool, 'select')
+
+            expected = member.line().center()
+            click = view.mapFromScene(member.line().pointAt(.25))
+            window.choose_tool('split')
+            original = set(view._nodes)
+            QTest.mouseClick(widget, Qt.MouseButton.LeftButton, pos=click)
+            created, = set(view._nodes) - original
+            self.assertLess((view._nodes[created].pos() - expected).manhattanLength(), 1e-8)
+            self.assertTrue(window.session.model.chord_loads)
+        finally:
+            window._dirty = False
+            window.close()
+
     def test_envelope_keeps_extremes_and_deformed_nodes_are_clickable(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         from PySide6.QtCore import Qt
@@ -304,7 +354,8 @@ class QtRedesignSmoke(unittest.TestCase):
                 item.text() for item in view.scene().items()
                 if isinstance(item, QGraphicsSimpleTextItem) and item.parentItem() is None
             }
-            self.assertIn('△ XY', annotations)
+            self.assertEqual({item.toolTip() for item in view._support_items},
+                             {'Apoio · UX e UY', 'Apoio · UY'})
             self.assertIn(window.session.model.nodes[0].id, annotations)
             other_items = [
                 item.deviceTransform(transform).mapRect(item.boundingRect())

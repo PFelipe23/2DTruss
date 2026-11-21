@@ -65,9 +65,6 @@ class WorkflowMixin:
         self.section_picker.changed.connect(self._apply_section)
         f.addRow('Grupo', self.section_group)
         f.addRow(self.section_picker)
-        self.section_details = QLabel()
-        self.section_details.setWordWrap(True)
-        f.addRow(self.section_details)
         v.addWidget(box)
         steel_box = QGroupBox('Aço do projeto')
         steel_layout = QVBoxLayout(steel_box)
@@ -105,12 +102,6 @@ class WorkflowMixin:
         if not g:return
         spec=self.session.project.get('sections',{}).get(g,{})
         self.section_picker.set_section(self.session.catalog, spec)
-        p = self.session.catalog.get(spec.get('profile'))
-        if p is not None:
-            self.section_details.setText(f'{p.family}  |  A = {p.area_mm2:.2f} mm²  |  '
-                f'massa = {p.mass_kg_m:.3f} kg/m\nOrigem: {p.origin}\nQualidade: {p.quality}')
-        else:
-            self.section_details.clear()
 
     def _apply_section(self, profile, count):
         self.assign_section(self.section_group.currentText(), profile, count)
@@ -181,7 +172,8 @@ class WorkflowMixin:
         self.action_form = f
         self.action_name=QLineEdit()
         self.action_kind = labeled_combo([('self_weight', 'Peso próprio'), ('surface', 'Superficial'),
-                                          ('line', 'Linear'), ('nodal', 'Nodal')])
+                                          ('line', 'Linear por banzo'), ('nodal', 'Nodal'),
+                                          ('member_line', 'Linear nas barras selecionadas')])
         self.action_kind.currentIndexChanged.connect(self._case_controls)
         self.action_class = labeled_combo(workflow.ACTION_CLASSES.items())
         self.action_reference = QLabel()
@@ -191,18 +183,30 @@ class WorkflowMixin:
         self.action_force_unit=QComboBox();self.action_force_unit.addItems(['kgf','kN','tf','N'])
         self.action_application = labeled_combo([('top', 'Banzo superior'), ('bottom', 'Banzo inferior')])
         self.action_basis = labeled_combo([('projected', 'Projeção horizontal'),
-                                           ('roof_surface', 'Inclinação da cobertura')])
+                                           ('roof_surface', 'Comprimento real')])
         self.action_direction = labeled_combo([
             ('down', 'Para baixo'), ('up', 'Para cima'), ('outward_normal', 'Normal para fora'),
             ('inward_normal', 'Normal para dentro'), ('right', 'Para a direita'), ('left', 'Para a esquerda'),
         ])
+        self.action_members = QLineEdit()
+        self.action_members.setReadOnly(True)
+        self.action_members.setPlaceholderText('Selecione as barras no desenho')
+        self.action_member_ids = []
+        self.action_member_row = QWidget()
+        members_layout = QHBoxLayout(self.action_member_row)
+        members_layout.setContentsMargins(0, 0, 0, 0)
+        members_layout.addWidget(self.action_members, 1)
+        members_layout.addWidget(IconButton('Usar barras selecionadas no desenho', self._take_action_members, 'select'))
+        self.action_member_mode = labeled_combo([('nodal', 'Forças nodais equivalentes'),
+                                                 ('flexure', 'Forças nodais + cortante e momento local')])
         self.action_zone = labeled_combo([('all', 'Toda a treliça'), ('left', 'Metade esquerda'),
                                          ('right', 'Metade direita')])
         for label,widget in [('Nome',self.action_name),('Natureza',self.action_class),
             ('Referência', self.action_reference), ('Distribuição',self.action_kind),
             ('Intensidade',self.action_value),('Unidade força',self.action_force_unit),
             ('Aplicação',self.action_application),('Base geométrica',self.action_basis),
-            ('Direção',self.action_direction),('Região',self.action_zone)]:f.addRow(label,widget)
+            ('Direção',self.action_direction),('Região',self.action_zone),
+            ('Barras', self.action_member_row), ('Tratamento', self.action_member_mode)]:f.addRow(label,widget)
         v.addWidget(box)
         self.action_audit=QLabel('Casos superficiais são distribuídos aos nós pelo motor.')
         self.action_audit.setWordWrap(True);v.addWidget(self.action_audit)
@@ -221,25 +225,64 @@ class WorkflowMixin:
 
     def _case_controls(self,*_):
         kind = self.action_kind.currentData()
-        general = kind in ('surface', 'line')
+        by_members = kind == 'member_line'
+        by_chord = kind in ('surface', 'line')
+        general = by_members or by_chord
         if kind == 'self_weight':
             self.action_class.setCurrentIndex(self.action_class.findData('permanent'))
         self.action_class.setEnabled(kind != 'self_weight')
         self._show_action_reference()
         self.action_value.setSuffix(' /m²' if kind == 'surface' else ' /m')
-        for w in (self.action_value,self.action_force_unit,self.action_application,self.action_basis,
-                  self.action_direction,self.action_zone):
-            self.action_form.setRowVisible(w, general)
+        for widget in (self.action_value, self.action_force_unit, self.action_basis, self.action_direction):
+            self.action_form.setRowVisible(widget, general)
+        for widget in (self.action_application, self.action_zone):
+            self.action_form.setRowVisible(widget, by_chord)
+        for widget in (self.action_member_row, self.action_member_mode):
+            self.action_form.setRowVisible(widget, by_members)
         if kind=='nodal':self.action_audit.setText('Edite as forças em Cargas nodais.')
         elif kind=='self_weight':self.action_audit.setText('Peso próprio: massa das barras e gravidade nominal g=10 m/s².')
         elif kind=='surface':self.action_audit.setText('Intensidade em força/m²; áreas tributárias obtidas do modelo.')
-        else:self.action_audit.setText('Intensidade em força/m; comprimento inclinado ou projetado.')
+        else:self.action_audit.setText('Intensidade em força/m; comprimento real ou projetado.')
+
+    def _set_action_members(self, members):
+        self.action_member_ids = list(members)
+        self.action_members.setText(', '.join(members))
+        self.action_members.setToolTip(self.action_members.text())
+
+    def _take_action_members(self):
+        members = sorted(identifier for kind, identifier in self._selected if kind == 'member')
+        if members:
+            self._set_action_members(members)
+        else:
+            self.action_audit.setText('Selecione pelo menos uma barra no desenho para usar a seleção.')
+
+    def open_member_actions(self):
+        if self.mode_3d.isChecked():
+            self.set_3d_visible(False)
+        self.choose_tool('select')
+        if self.view.selection_filter not in ('all', 'member'):
+            self.selection_filter.setCurrentIndex(self.selection_filter.findData('member'))
+        selected = sorted(identifier for kind, identifier in self._selected if kind == 'member')
+        patterns = [row for row in load_patterns(self.session.project) if row['kind'] == 'member_line']
+        match = next((row for row in reversed(patterns)
+                      if set(row.get('member_ids', [])) == set(selected)), None)
+        if match or (patterns and not selected):
+            self.action_case.setCurrentText((match or patterns[-1])['id'])
+        else:
+            if not self._new_action_case(preset='member_line'):
+                return
+        self._open_load_dialog(self.actions_tab, self.action_case)
+        if selected:
+            self._set_action_members(selected)
+        self.action_value.setFocus()
+        self.action_value.selectAll()
 
     def _populate_case(self,*_):
         cid=self.action_case.currentText()
         case=next((x for x in load_patterns(self.session.project) if x['id']==cid),None)
         if not case:
             self.action_name.clear()
+            self._set_action_members([])
             self.action_value.set_stored_value(0)
             return
         self.action_force_unit.setCurrentText(case.get('force_unit', 'kgf'))
@@ -247,10 +290,12 @@ class WorkflowMixin:
             (self.action_application,case.get('application','top')),
             (self.action_basis,case.get('basis','projected')),
             (self.action_direction,case.get('direction','down')),
-            (self.action_zone,case.get('zone','all'))]
+            (self.action_zone,case.get('zone','all')),
+            (self.action_member_mode, case.get('member_mode','nodal'))]
         for combo, key in pairs:
             with QSignalBlocker(combo):
                 combo.setCurrentIndex(combo.findData(key))
+        self._set_action_members(case.get('member_ids', []))
         self.action_name.setText(case.get('name',cid))
         self.action_class.setCurrentIndex(self.action_class.findData(workflow.pattern_class(case)))
         self.action_value.set_stored_value(float(case.get('value',0)))
@@ -269,20 +314,29 @@ class WorkflowMixin:
             self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Auditoria de ações',str(e))
 
-    def _new_action_case(self):
-        name,ok=QInputDialog.getText(self,'Novo padrão','Identificador do padrão:')
-        if not ok:return
-        distributions = [self.action_kind.itemText(i) for i in range(self.action_kind.count())]
-        choice, ok = QInputDialog.getItem(self, 'Novo padrão', 'Distribuição da carga',
-                                          distributions, max(0, self.action_kind.currentIndex()), False)
-        if not ok:return
-        try:
+    def _new_action_case(self, _checked=False, *, preset=None):
+        name, ok = QInputDialog.getText(self, 'Novo padrão', 'Identificador do padrão:')
+        if not ok:
+            return
+        kind = preset
+        if kind is None:
+            distributions = [self.action_kind.itemText(i) for i in range(self.action_kind.count())]
+            choice, ok = QInputDialog.getItem(self, 'Novo padrão', 'Distribuição da carga',
+                                              distributions, max(0, self.action_kind.currentIndex()), False)
+            if not ok:
+                return
             kind = self.action_kind.itemData(distributions.index(choice))
-            p=workflow.add_load_case(self.session.project,name,kind,pattern_only=True)
-            if self._apply(p,'Padrão incluído'):
+        try:
+            project = workflow.add_load_case(self.session.project, name, kind, pattern_only=True)
+            if self._apply(project, 'Padrão incluído'):
                 self.action_case.setCurrentText(name.strip())
                 self._show_load_case(name.strip())
-        except Exception as e:QMessageBox.warning(self,'Ações',str(e))
+                if kind == 'member_line' and any(kind == 'member' for kind, _ in self._selected):
+                    self._take_action_members()
+                return True
+        except ValueError as error:
+            QMessageBox.warning(self, 'Ações', str(error))
+        return False
 
     def _apply_action_case(self):
         cid=self.action_case.currentText()
@@ -293,12 +347,15 @@ class WorkflowMixin:
             intensity = (self.action_value.submitted_value()
                          if force_unit == original.get('force_unit', 'kgf')
                          else self.action_value.value())
+            targeted = self.action_kind.currentData() == 'member_line'
             p=workflow.update_load_case(self.session.project,cid,
                 name=self.action_name.text(),kind=self.action_kind.currentData(),
                 value=intensity,force_unit=force_unit,
                 application=self.action_application.currentData(),basis=self.action_basis.currentData(),
-                direction=self.action_direction.currentData(),zone=self.action_zone.currentData(),
-                action_class=self.action_class.currentData())
+                direction=self.action_direction.currentData(),
+                zone='all' if targeted else self.action_zone.currentData(),
+                action_class=self.action_class.currentData(), member_ids=self.action_member_ids,
+                member_mode=self.action_member_mode.currentData())
             if self._apply(p,'Padrão atualizado'):
                 self._show_load_case(cid)
         except Exception as e:QMessageBox.warning(self,'Ações',str(e))

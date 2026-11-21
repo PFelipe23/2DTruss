@@ -36,6 +36,7 @@ class Model:
     shape: str
     truss_type: str
     panels: int
+    chord_loads: bool = False
 
     def node_map(self) -> dict[str, Node]:
         return {n.id: n for n in self.nodes}
@@ -189,7 +190,8 @@ def _explicit_model(project:dict) -> Model:
     xs=[n.x for n in nodes]
     L=max(xs)-min(xs)
     spacing=float(project.get('geometry',{}).get('frame_spacing_m',1))*1000
-    model=Model(nodes,members,supports,L,spacing,'explicit','explicit',0)
+    model=Model(nodes,members,supports,L,spacing,'explicit','explicit',0,
+                chord_loads=d.get('chord_loads') is True)
     validate_model(model)
     return model
 

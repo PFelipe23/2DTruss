@@ -7,7 +7,8 @@ adequado à inspeção de treliças simples e para GPUs corporativas restritas.
 """
 from __future__ import annotations
 from copy import deepcopy
-from math import fsum
+from itertools import product
+from math import atan2, degrees, fsum, sqrt
 from pathlib import Path
 from html import escape
 
@@ -41,8 +42,23 @@ PRESETS = {
 }
 
 
+def isometric_corners():
+    corners = {}
+    tilt = degrees(atan2(1, sqrt(2)))
+    for x, y, z in product((-1, 1), repeat=3):
+        names = ('Direita' if x > 0 else 'Esquerda', 'Topo' if y > 0 else 'Base',
+                 'Frente' if z > 0 else 'Atrás')
+        label = 'Iso · ' + ' / '.join(names)
+        corners[x, y, z] = label
+        PRESETS[label] = (degrees(atan2(x, z)) % 360, y * tilt)
+    return corners
+
+
+ISO_CORNERS = isometric_corners()
+
+
 class OrientationCube(QWidget):
-    """Miniatura da câmera com faces que abrem vistas ortogonais."""
+    """Faces ortogonais e vértices isométricos da câmera."""
 
     def __init__(self, change_view):
         super().__init__()
@@ -51,11 +67,13 @@ class OrientationCube(QWidget):
         self.setAccessibleName('Cubo de orientação 3D')
         self.change_view = change_view
         self.faces = {}
+        self.corners = {}
         self.hovered = None
 
     def orient(self, yaw, elevation):
         project = camera_projection(Camera(yaw, elevation))
         self.faces.clear()
+        self.corners.clear()
         faces = (
             ('Frontal XY', 'Frente', 2, 1), ('Posterior XY', 'Atrás', 2, -1),
             ('Direita YZ', 'Dir.', 0, 1), ('Esquerda YZ', 'Esq.', 0, -1),
@@ -72,7 +90,9 @@ class OrientationCube(QWidget):
                 vertex = normal.copy()
                 vertex[sides[0]], vertex[sides[1]] = a, b
                 x, y, _ = project(vertex)
-                vertices.append(QPointF(41 + 23 * x, 39 + 23 * y))
+                point = QPointF(41 + 21 * x, 39 + 21 * y)
+                vertices.append(point)
+                self.corners[ISO_CORNERS[tuple(vertex)]] = point
             self.faces[label] = (QPolygonF(vertices), caption, axis)
         self.update()
 
@@ -92,7 +112,16 @@ class OrientationCube(QWidget):
                     painter.drawText(QRectF(center.x() - 23, center.y() - 9, 46, 18),
                                      Qt.AlignmentFlag.AlignCenter, caption)
 
+            for name, corner in self.corners.items():
+                painter.setBrush(QColor('#166393' if name == self.hovered else '#FFFFFF'))
+                painter.setPen(QPen(QColor('#245E82'), 1.2))
+                painter.drawEllipse(corner, 3.3, 3.3)
+
     def _face_at(self, point):
+        corner = next((name for name, position in self.corners.items()
+                       if (position - point).manhattanLength() <= 6), None)
+        if corner is not None:
+            return corner
         return next((name for name, (polygon, _, _) in self.faces.items()
                      if polygon.containsPoint(point, Qt.FillRule.OddEvenFill)), None)
 
@@ -260,6 +289,8 @@ class Truss3DView(QWidget):
         # Página de visualização.
         colors_page=QWidget();f=QFormLayout(colors_page)
         self.preset = QComboBox()
+        self.preset.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.preset.setMinimumContentsLength(15)
         self.preset.addItems(PRESETS)
         self.preset.currentTextChanged.connect(self.set_preset)
         f.addRow('Vista', self.preset)
@@ -323,9 +354,8 @@ class Truss3DView(QWidget):
             widget.setKeyboardTracking(False)
             widget.valueChanged.connect(self.apply_layout)
         self.layout_type.currentIndexChanged.connect(self.apply_layout)
-        help_label=QLabel('Nas seções duplas, informe a distância entre centroides. '
-                          'Distâncias nulas recebem uma folga visual.')
-        help_label.setWordWrap(True);g.addRow(help_label)
+        for offset in (self.dx, self.dy):
+            offset.setToolTip('Distância entre centroides das seções duplas. Valores nulos recebem folga na inspeção visual.')
         self.pages.addTab(geom_page,'Arranjo')
         self.pages.setCurrentWidget(geom_page)
 
@@ -385,7 +415,9 @@ class Truss3DView(QWidget):
             item.setBrush(QBrush(QColor('#64A1C5')))
             scene.addItem(item)
         scene.setSceneRect(scene.itemsBoundingRect().adjusted(-12,-12,12,12))
-        self.section_preview.fitInView(scene.sceneRect(),Qt.AspectRatioMode.KeepAspectRatio)
+        self.section_preview.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        QTimer.singleShot(0, self.section_preview,
+                          lambda: self.section_preview.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio))
 
     def schedule_redraw(self,*_):
         if not self._orbit_update.isActive():

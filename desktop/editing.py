@@ -15,6 +15,7 @@ def materialize(project:dict, model) -> dict:
     p=deepcopy(project)
     if 'model_override' not in p:
         p['model_override']={
+            'chord_loads': True,
             'nodes':[{'id':n.id,'x_mm':n.x,'y_mm':n.y} for n in model.nodes],
             'members':[{'id':m.id,'i':m.i,'j':m.j,'group':m.group,
                         'profile':m.profile,'area_mm2':m.area,'mass_kg_m':m.mass} for m in model.members],
@@ -124,9 +125,15 @@ def split_members(project:dict,model,member_ids:Iterable[str],t:float=.5)->tuple
         mseq=p.setdefault('cad_sequences',{})
         mseq['M']=max(mseq.get('M',1),max((int(x[1:]) for x in _ids_before if x.startswith('M') and x[1:].isdigit()),default=0)+1)
         d['members'].remove(member)
+        replacements = []
         for a_id,b_id in ((original['i'],nid),(nid,original['j'])):
             m=deepcopy(original);m['id']=_id('M',d['members'],p);m['i']=a_id;m['j']=b_id
             d['members'].append(m)
+            replacements.append(m['id'])
+        for case in [*p.get('load_patterns', []), *p.get('load_cases', [])]:
+            if case.get('kind') == 'member_line' and mid in case.get('member_ids', []):
+                case['member_ids'] = [child for identifier in case['member_ids']
+                                      for child in (replacements if identifier == mid else [identifier])]
         specs=p.get('stability',{}).get('members',{})
         # Invalida hipótese específica de flambagem; NÃO a transfere automaticamente.
         specs.pop(mid,None)
@@ -158,7 +165,13 @@ def delete_elements(project:dict,model,node_ids=(),member_ids=())->dict:
     p['cad_drafts']=[n for n in p.get('cad_drafts',[]) if n['id'] not in remove_nodes]
     d['supports']=[s for s in d['supports'] if s['node'] not in remove_nodes]
     for c in [*p.get('load_cases', []), *p.get('load_patterns', [])]:
-        if c.get('kind')=='nodal':c['loads']=[r for r in c.get('loads',[]) if r['node'] not in remove_nodes]
+        if c.get('kind') == 'nodal':
+            c['loads'] = [r for r in c.get('loads', []) if r['node'] not in remove_nodes]
+        if c.get('kind') == 'member_line':
+            remaining = [mid for mid in c.get('member_ids', []) if mid not in remove_members]
+            if c.get('member_ids') and not remaining:
+                c['value'] = 0.
+            c['member_ids'] = remaining
     stability=p.get('stability',{})
     for nid in remove_nodes:
         stability.get('nodal_restraints', {}).pop(nid, None)

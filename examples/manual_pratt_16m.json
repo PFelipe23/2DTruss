@@ -1,0 +1,114 @@
+{
+  "schema": "poe-truss-python/v1",
+  "name": "Manual 2DTruss — cobertura Pratt de 16 m",
+  "geometry": {
+    "span_m": 16.0,
+    "frame_spacing_m": 5.0,
+    "panels": 16,
+    "height_m": 1.1,
+    "rise_m": 1.2,
+    "roof_shape": "gable",
+    "truss_type": "Pratt",
+    "purlin_max_m": 1.2,
+    "angle_min_deg": 45.0,
+    "angle_max_deg": 60.0
+  },
+  "material": {
+    "E_MPa": 200000
+  },
+  "sections": {
+    "superior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "inferior": {
+      "profile": "Ue 150x60x20x3,00",
+      "count": 2
+    },
+    "montante": {
+      "profile": "U 100x50x2,65",
+      "count": 1
+    },
+    "diagonal": {
+      "profile": "L laminada 60x60x4",
+      "count": 2
+    }
+  },
+  "load_cases": [
+    {
+      "id": "G",
+      "name": "Cargas permanentes didáticas",
+      "kind": "static",
+      "patterns": {
+        "G_SUP": 1,
+        "G_INF": 1
+      }
+    },
+    {
+      "id": "Q",
+      "name": "Carga pontual didática",
+      "kind": "static",
+      "patterns": {
+        "Q_CENTRO": 1
+      }
+    }
+  ],
+  "combinations": [
+    {
+      "id": "ELU_DEMO",
+      "combination_class": "uls_normal",
+      "factors": {
+        "G": 1.35,
+        "Q": 1.5
+      }
+    },
+    {
+      "id": "ELS_DEMO",
+      "combination_class": "sls_rare",
+      "factors": {
+        "G": 1,
+        "Q": 1
+      }
+    }
+  ],
+  "load_patterns": [
+    {
+      "kind": "line",
+      "force_unit": "kN",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all",
+      "action_class": "permanent",
+      "id": "G_SUP",
+      "name": "Carga no banzo superior",
+      "value": 2,
+      "application": "top"
+    },
+    {
+      "kind": "line",
+      "force_unit": "kN",
+      "basis": "projected",
+      "direction": "down",
+      "zone": "all",
+      "action_class": "permanent",
+      "id": "G_INF",
+      "name": "Carga no banzo inferior",
+      "value": 0.8,
+      "application": "bottom"
+    },
+    {
+      "id": "Q_CENTRO",
+      "name": "Força vertical no centro do banzo inferior",
+      "kind": "nodal",
+      "action_class": "variable",
+      "loads": [
+        {
+          "node": "B08",
+          "fx": 0,
+          "fy": -4,
+          "force_unit": "kN"
+        }
+      ]
+    }
+  ]
+}

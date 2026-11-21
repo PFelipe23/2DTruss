@@ -26,14 +26,26 @@ Extraia ou copie a pasta inteira `dist\2DTruss_v0.1` e abra `2DTruss_v0.1.exe`. 
 
 Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2DTruss_v0.1\2DTruss_v0.1.exe" --smoke-test`. O código de saída 0 confirma a abertura do aplicativo, o cálculo do exemplo, a vista 3D, a importação do DXF de teste, a leitura e gravação JSON e a limpeza da análise ao iniciar outro projeto.
 
+## Assistente de cobertura
+
+Abra **Assistente de cobertura**, ao lado de **Novo**, para preparar um projeto independente.
+
+1. Informe o vão, a distância entre treliças, a forma da cobertura, o desnível, a faixa de alturas e o passo máximo real entre apoios da telha fornecido pelo fabricante. A busca usa os perfis e o aço carregados na origem.
+2. Preencha a massa da telha, acessórios, sobrecarga e, se aplicáveis, as intensidades normais de pressão e sucção. O 2DTruss cria padrões e casos separados e distribui as ações aos nós. A combinação **REF_GRAV** reúne apenas as ações gravitacionais com fator unitário para comparar geometrias. Os coeficientes e intensidades de projeto são definidos pelo responsável.
+3. Escolha a alternativa após comparar passo, flecha e massa de barras. A coluna **Critérios** indica atendimento apenas ao passo e à flecha informados no assistente. Caso a geometria precise de revisão, volte e ajuste os parâmetros.
+4. Para um estudo transversal, marque a opção, selecione pares de nós dos dois banzos e informe a quantidade de vãos, a força horizontal por nó superior, a área de cada barra e a referência. Clique **Analisar planos selecionados** para comparar esforços e deslocamentos.
+5. Clique **Gerar projeto** e salve o JSON. Abra **Mais comandos → Planos de travamento** para consultar uma estação em um projeto separado, com casos **H_POS** e **H_NEG**, esforços, deslocamentos e reações.
+
+O estudo de travamento é um modelo vertical isolado em X, com barras axiais bilaterais e apoios idealizados nos extremos inferiores. O eixo horizontal do plano acompanha o espaçamento entre treliças. A referência inserida documenta a origem da ação e dos apoios. O estudo não confirma automaticamente contenções laterais na treliça principal. A correspondência com o procedimento da apostila de Olídio Volpato requer a conferência da edição e do trecho aplicável.
+
 ## Interface e atalhos
 
 - Barra única de ícones para arquivo, modelagem, cargas, exibição, unidades e cálculo. Passe o mouse por 500 ms para identificar um comando. **Mais comandos** abre importação, exportação e outras ferramentas.
-- Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), caixa de seleção, zoom pela roda, ferramenta pan, ajuste da vista, escala vertical exclusivamente visual.
-- **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade de 50 mm. A posição só é aplicada ao modelo após soltar o mouse.
+- Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), janela por contenção ou cruzamento, filtro no rodapé, zoom pela roda e pan ao segurar o botão central.
+- **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade configurável (50 mm por padrão). A posição só é aplicada ao modelo após soltar o mouse.
 - **Novo nó**: clique cria um *rascunho* de nó; ele passa ao modelo estrutural quando uma barra válida o conecta à malha existente. Isso impede nós isolados no solver.
 - **Criar barra**: clique primeiro nó e depois segundo nó; o grupo da barra segue o combo da aba Propriedades.
-- **Subdividir**: clique uma barra; cria nó intermediário e duas barras, preservando o comprimento e a área. A barra original deixa de existir e novos IDs são emitidos sem reciclagem.
+- **Dividir barra ao meio**: clique uma barra; cria nó no ponto médio e duas barras, preservando o comprimento e a área. A barra original deixa de existir e novos IDs são emitidos sem reciclagem.
 - **Excluir**: barra ou nó selecionado, com remoção das barras incidentes e cargas nodais órfãs. Se o resultado não for um modelo geométrico válido, a edição é recusada.
 - Propriedades: edição X/Y, suporte UX/UY, grupo e perfil por grupo.
 - Cargas nodais em kgf, tf, kN ou N. Padrões distribuídos usam intensidade, direção, zona e base de comprimento para obter as resultantes nodais.
@@ -148,5 +160,5 @@ O seletor **Aço do projeto** aplica propriedades ao material uniforme do modelo
 - O procedimento de build gera um pacote portátil sem assinatura digital.
 - Perfis duplos permanecem dependentes de hipóteses de solidarização; resistência por NBR 14762 ainda não implementada.
 - Intercâmbio DWG requer ODA File Converter externo.
-- Edição CAD com modelo explícito não suporta distribuição superficial automática: ações de área/linha ficam bloqueadas até implementação de associação de superfícies/tramos no CAD.
+- Edição CAD com modelo explícito não suporta distribuição superficial automática: ações por banzo dependem da geometria gerada. Cargas lineares diretamente nas barras selecionadas estão disponíveis.
 - Reações/esforços ainda precisam de validação cruzada real no FTool.
