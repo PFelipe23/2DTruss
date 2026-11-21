@@ -22,9 +22,11 @@ python -m pip install -r requirements-build.txt
 call BUILD_EXE_WINDOWS.bat
 ```
 
-Extraia ou copie a pasta inteira `dist\2DTruss_v0.1` e abra `2DTruss_v0.1.exe`. A pasta `_internal` contém Python, Qt, o catálogo e os exemplos incluídos. O aplicativo empacotado roda sem instalação separada de Python. A importação DWG continua dependendo do conversor ODA local.
+Extraia ou copie a pasta inteira `dist\2DTruss_v0.1` e abra `2DTruss_v0.1.exe`. A pasta `_internal` contém Python, Qt, o catálogo e os exemplos incluídos. O aplicativo empacotado roda sem instalação separada de Python. Extraia em uma pasta gravável para que as preferências sejam salvas em `2DTruss.ini`, junto ao executável. O projeto do manual fica em `_internal\examples\manual_pratt_16m.json`. A importação DWG continua dependendo do conversor ODA local.
 
-Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2DTruss_v0.1\2DTruss_v0.1.exe" --smoke-test`. O código de saída 0 confirma a abertura do aplicativo, o cálculo do exemplo, a vista 3D, a importação do DXF de teste, a leitura e gravação JSON e a limpeza da análise ao iniciar outro projeto.
+Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2DTruss_v0.1\2DTruss_v0.1.exe" --smoke-test`. O código de saída 0 confirma a abertura do aplicativo, o cálculo do exemplo, a vista 3D, a importação do DXF de teste, a leitura e gravação JSON, o assistente de cobertura e a limpeza da análise ao iniciar outro projeto.
+
+Para uma compilação isolada, defina `TRUSS_BUILD_DIR` e `TRUSS_DIST_DIR` como diretórios de trabalho e saída. O GitHub Actions disponibiliza a pasta portátil completa como artefato após o teste do executável.
 
 ## Assistente de cobertura
 

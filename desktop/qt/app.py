@@ -2113,6 +2113,12 @@ class DesktopApp(WorkflowMixin,QMainWindow):
 def start():
     app=QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName('2DTruss');app.setStyle('Fusion')
-    window=DesktopApp(settings=QSettings('2DTruss', 'Desktop'));window.show()
+    if getattr(sys, 'frozen', False):
+        preferences = Path(sys.executable).with_name('2DTruss.ini')
+        settings = QSettings(str(preferences), QSettings.Format.IniFormat)
+    else:
+        settings = QSettings('2DTruss', 'Desktop')
+    window = DesktopApp(settings=settings)
+    window.show()
     QTimer.singleShot(0,window.view.fit)
     return app.exec()
