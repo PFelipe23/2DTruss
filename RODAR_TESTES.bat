@@ -8,10 +8,11 @@ echo Python nao localizado.
 pause
 goto :eof
 :teste_py
-py -3 -m unittest discover -s tests -v
-pause
-goto :eof
+py -3 -m pytest -q -rs tests
+goto resultado
 :teste_python
-python -m unittest discover -s tests -v
+python -m pytest -q -rs tests
+:resultado
+set "TEST_EXIT=%errorlevel%"
 pause
-goto :eof
+exit /b %TEST_EXIT%

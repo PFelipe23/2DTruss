@@ -25,6 +25,74 @@ ROOF=json.loads((ROOT/'examples/cobertura_duas_aguas.json').read_text())
 
 
 class AnalyticTests(unittest.TestCase):
+    def test_uniform_member_load_has_optional_simply_supported_flexure(self):
+        project = json.loads((ROOT / 'examples/FTool_A02_trelica_triangular.json').read_text(encoding='utf-8'))
+        base = {'kind': 'member_line', 'value': 2, 'force_unit': 'kN',
+                'member_ids': ['AB'], 'direction': 'down', 'basis': 'roof_surface'}
+        project['load_patterns'] = [
+            dict(base, id='W_N', member_mode='nodal'),
+            dict(base, id='W_F', member_mode='flexure'),
+            dict(base, id='W_U', member_mode='flexure', direction='up', value=1),
+        ]
+        project['load_cases'] = [
+            {'id': 'N', 'kind': 'static', 'patterns': {'W_N': 1}},
+            {'id': 'F', 'kind': 'static', 'patterns': {'W_F': 1}},
+            {'id': 'U', 'kind': 'static', 'patterns': {'W_U': 1}},
+        ]
+        project['combinations'] = [{'id': 'ENV', 'factors': {'F': 1.5, 'U': -1}}]
+        analyses = run_project(project, load_catalog(ROOT/'catalogo_perfis.csv'))['analyses']
+        assert analyses['N']['loads'] == analyses['F']['loads']
+        assert analyses['N']['reactions'] == analyses['F']['reactions']
+        assert 'member_flexure' not in analyses['N']
+        assert analyses['F']['loads']['A']['fy_n'] == -4000
+        assert analyses['F']['reactions']['A']['fy_n'] == 4000
+        assert analyses['F']['member_flexure']['AB'] == {
+            'shear_i_n': 4000, 'shear_j_n': -4000, 'moment_mid_nmm': 4_000_000,
+        }
+        assert analyses['ENV']['member_flexure']['AB'] == {
+            'shear_i_n': 8000, 'shear_j_n': -8000, 'moment_mid_nmm': 8_000_000,
+        }
+
+    def test_classified_envelopes_keep_manual_combinations_out(self):
+        project = copy.deepcopy(TRIANGLE)
+        project['combinations'] = [
+            {'id': 'U', 'combination_class': 'uls_normal', 'factors': {'F10': 2}},
+            {'id': 'S', 'combination_class': 'sls_rare', 'factors': {'F10': -1}},
+            {'id': 'M', 'factors': {'F10': 10}},
+        ]
+        result = run_project(project, CATALOG)
+        self.assertEqual(result['envelope_combinations'], {'elu': ['U'], 'els': ['S']})
+        self.assertEqual(result['envelope']['AB']['tension_case'], 'M')
+        self.assertEqual(result['classified_envelopes']['elu']['AB']['tension_case'], 'U')
+        self.assertNotIn('els', result['classified_envelopes'])
+        self.assertAlmostEqual(result['analyses']['S']['axial_n']['AB'], -20_000 / 3)
+        self.assertAlmostEqual(result['analyses']['S']['nodal_displacements']['C']['uy_mm'], .2625)
+
+    def test_static_case_and_combination_apply_pattern_factors(self):
+        from desktop.bridge import Session
+        from desktop.workflow import add_combination, update_combination, update_static_case
+
+        project = copy.deepcopy(TRIANGLE)
+        project['load_patterns'] = [{
+            'id': 'Q4', 'kind': 'nodal', 'action_class': 'variable',
+            'loads': [{'node': 'C', 'fy': -4, 'force_unit': 'kN'}],
+        }]
+        project = update_static_case(project, 'Q18', 'Cargas combinadas',
+                                     {'F10': 1, 'Q4': 2}, create=True)
+        project = add_combination(project, 'S9')
+        project = update_combination(project, 'S9', {'Q18': .5}, 'sls_rare')
+        session = Session(project, CATALOG)
+        result = session.calculate()
+        self.assertNotIn('Q4', result['analyses'])
+        self.assertEqual(session.forces_for_case('Q4')['C'], (0., -4000.))
+        self.assertEqual(session.forces_for_case('S9')['C'], (0., -9000.))
+        case = result['analyses']['Q18']
+        self.assertAlmostEqual(case['axial_n']['AC'], -15000.)
+        self.assertAlmostEqual(case['reactions']['A']['fy_n'], 9000.)
+        self.assertAlmostEqual(result['analyses']['S9']['axial_n']['AB'], 6000.)
+        self.assertEqual({row['pattern_id'] for row in result['load_audit']['Q18']['entries']},
+                         {'F10', 'Q4'})
+
     def test_A02_member_forces(self):
         r=run_project(TRIANGLE,CATALOG)['analyses']['F10']['axial_n']
         self.assertAlmostEqual(r['AB']/1000, 6.6666666667, places=8)

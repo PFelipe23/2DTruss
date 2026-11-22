@@ -15,14 +15,14 @@
     "diagonal": {"profile": "L laminada 60x60x4", "count": 2}
   },
   "load_cases": [
-    {"id":"G1", "name":"Peso próprio das barras", "kind":"self_weight"},
-    {"id":"G2", "name":"Telhas 8 kgf/m² (superfície)", "kind":"surface", "value":8, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"down", "zone":"all"},
-    {"id":"G3", "name":"Terças 6 kgf/m² (projeção)", "kind":"surface", "value":6, "force_unit":"kgf", "application":"top", "basis":"projected", "direction":"down", "zone":"all"},
-    {"id":"G4", "name":"Forro 8 kgf/m²", "kind":"surface", "value":8, "force_unit":"kgf", "application":"bottom", "basis":"projected", "direction":"down", "zone":"all"},
-    {"id":"G5", "name":"Utilidades 15 kgf/m²", "kind":"surface", "value":15, "force_unit":"kgf", "application":"bottom", "basis":"projected", "direction":"down", "zone":"all"},
-    {"id":"Q1", "name":"Sobrecarga 25 kgf/m²", "kind":"surface", "value":25, "force_unit":"kgf", "application":"top", "basis":"projected", "direction":"down", "zone":"all"},
-    {"id":"W_UP", "name":"Vento sucção 30 kgf/m²", "kind":"surface", "value":30, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"outward_normal", "zone":"all"},
-    {"id":"W_DOWN", "name":"Vento pressão 30 kgf/m²", "kind":"surface", "value":30, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"inward_normal", "zone":"all"}
+    {"id":"G1", "name":"Peso próprio das barras", "action_class":"permanent", "kind":"self_weight"},
+    {"id":"G2", "name":"Telhas 8 kgf/m² (superfície)", "action_class":"permanent", "kind":"surface", "value":8, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"down", "zone":"all"},
+    {"id":"G3", "name":"Terças 6 kgf/m² (projeção)", "action_class":"permanent", "kind":"surface", "value":6, "force_unit":"kgf", "application":"top", "basis":"projected", "direction":"down", "zone":"all"},
+    {"id":"G4", "name":"Forro 8 kgf/m²", "action_class":"permanent", "kind":"surface", "value":8, "force_unit":"kgf", "application":"bottom", "basis":"projected", "direction":"down", "zone":"all"},
+    {"id":"G5", "name":"Utilidades 15 kgf/m²", "action_class":"permanent", "kind":"surface", "value":15, "force_unit":"kgf", "application":"bottom", "basis":"projected", "direction":"down", "zone":"all"},
+    {"id":"Q1", "name":"Sobrecarga 25 kgf/m²", "action_class":"variable", "kind":"surface", "value":25, "force_unit":"kgf", "application":"top", "basis":"projected", "direction":"down", "zone":"all"},
+    {"id":"W_UP", "name":"Vento sucção 30 kgf/m²", "action_class":"wind", "kind":"surface", "value":30, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"outward_normal", "zone":"all"},
+    {"id":"W_DOWN", "name":"Vento pressão 30 kgf/m²", "action_class":"wind", "kind":"surface", "value":30, "force_unit":"kgf", "application":"top", "basis":"roof_surface", "direction":"inward_normal", "zone":"all"}
   ],
   "combinations": [
     {"id":"S_GRAV", "name":"Demonstração: G+Q (fatores manuais)", "factors":{"G1":1,"G2":1,"G3":1,"G4":1,"G5":1,"Q1":1}},

@@ -13,11 +13,19 @@ from desktop.bridge import Session, CATALOG
 
 
 class SectionMeshTests(unittest.TestCase):
+    def test_gerdau_h_uses_independent_flange_and_web_dimensions(self):
+        shape = self.catalog['W 150 x 22,5 (H)']
+        self.assertEqual((shape.height, shape.flange, shape.thickness, shape.flange_thickness),
+                         (152, 152, 5.8, 6.6))
+        ideal_area = 2 * 152 * 6.6 + (152 - 2 * 6.6) * 5.8
+        self.assertAlmostEqual(polygon_area(section_polygon(shape)), ideal_area)
+
     @classmethod
     def setUpClass(cls): cls.catalog=load_shape_catalog(CATALOG)
 
     def test_all_catalog_shapes_have_simple_ccw_outline(self):
-        self.assertEqual(len(self.catalog),24)
+        families = {shape.family.split()[0] for shape in self.catalog.values()}
+        self.assertEqual(families, {'U', 'UE', 'L', 'W', 'H', 'HP'})
         for shape in self.catalog.values():
             with self.subTest(profile=shape.name):
                 pts=section_polygon(shape)

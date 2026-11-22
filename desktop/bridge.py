@@ -7,7 +7,9 @@ from math import isfinite
 from poe_truss.catalog import load_catalog
 from poe_truss.engine import run_project
 from poe_truss.model import make_model
-from poe_truss.loads import build_case_loads, merge_forces
+from poe_truss.loads import load_patterns, merge_forces, resolve_case_loads
+from .editing import review_nodal_restraints
+from .workflow import add_load_case, update_nodal_loads
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT = ROOT / 'examples' / 'cobertura_duas_aguas.json'
@@ -28,6 +30,13 @@ def write_project(path: Path|str, project: dict) -> None:
     temp.replace(p)
 
 
+def blank_project():
+    return {'schema': 'poe-truss-python/v1', 'name': '', 'geometry': {},
+            'material': {'E_MPa': 200000}, 'sections': {},
+            'model_override': {'nodes': [], 'members': [], 'supports': []},
+            'load_patterns': [], 'load_cases': [], 'combinations': []}
+
+
 class Session:
     def __init__(self, project=None, catalog=None):
         self.catalog=catalog or load_catalog(CATALOG)
@@ -45,6 +54,8 @@ class Session:
         return self.model
 
     def calculate(self):
+        if not self.model.members:
+            raise ValueError('Crie ou importe a geometria antes de calcular.')
         self.result=run_project(self.project,self.catalog)
         self.calculated_revision=self.revision
         return self.result
@@ -68,6 +79,9 @@ class Session:
             item['x_mm']=float(x_mm);item['y_mm']=float(y_mm)
         else:
             p.setdefault('node_edits',{})[node_id]={'x_mm':float(x_mm),'y_mm':float(y_mm)}
+        original = self.model.node_map().get(node_id)
+        if original is not None and (original.x, original.y) != (float(x_mm), float(y_mm)):
+            review_nodal_restraints(p)
         self.update_project(p)
 
     def set_support(self, node_id: str, ux:bool, uy:bool):
@@ -84,45 +98,40 @@ class Session:
         self.update_project(p)
 
     def nodal_cases(self):
-        return [x for x in self.project.get('load_cases',[]) if x.get('kind')=='nodal']
+        return [pattern for pattern in load_patterns(self.project) if pattern['kind'] == 'nodal']
 
     def add_nodal_case(self, case_id:str):
-        case_id=case_id.strip()
-        if not case_id or len(case_id)>32 or not case_id.replace('_','').isalnum():
-            raise ValueError('ID do caso deve ser alfanumérico, até 32 caracteres')
-        if case_id in {c['id'] for c in self.project.get('load_cases',[])}:
-            raise ValueError('ID já utilizado')
-        p=deepcopy(self.project)
-        p.setdefault('load_cases',[]).append({'id':case_id,'name':case_id,'kind':'nodal','loads':[]})
-        self.update_project(p)
+        self.update_project(add_load_case(self.project, case_id, 'nodal'))
 
     def set_nodal_load(self, case_id:str, node_id:str, fx:float, fy:float, force_unit='kgf', index=None):
-        if node_id not in {n.id for n in self.model.nodes}: raise ValueError('Nó inexistente')
-        if force_unit not in ('kgf','tf','kN','N'): raise ValueError('Unidade inválida')
-        if not all(isfinite(float(v)) for v in (fx,fy)): raise ValueError('Força inválida')
-        p=deepcopy(self.project)
-        case=next((x for x in p['load_cases'] if x['id']==case_id),None)
-        if case is None or case['kind']!='nodal': raise ValueError('Caso nodal não encontrado')
-        row={'node':node_id,'fx':float(fx),'fy':float(fy),'force_unit':force_unit}
-        if index is None:case.setdefault('loads',[]).append(row)
-        elif 0<=index<len(case['loads']):case['loads'][index]=row
-        else: raise IndexError('Índice da força nodal inexistente')
-        self.update_project(p)
+        self.update_project(update_nodal_loads(
+            self.project, self.model, case_id, [node_id], float(fx), float(fy), force_unit, index,
+        ))
 
     def delete_nodal_load(self,case_id,index:int):
         p=deepcopy(self.project)
-        case=next((x for x in p['load_cases'] if x['id']==case_id and x['kind']=='nodal'),None)
+        case=next((x for x in load_patterns(p) if x['id']==case_id and x['kind']=='nodal'),None)
         if case is None: raise ValueError('Caso nodal inexistente')
         del case['loads'][index]
         self.update_project(p)
 
     def forces_for_case(self, case_id:str):
-        raw={}
-        for c in self.project.get('load_cases',[]):
-            if c['kind']=='nodal' and not c.get('loads'):
-                raw[c['id']]={}
-            else:raw[c['id']]=build_case_loads(self.model,c)[0]
-        if case_id in raw:return raw[case_id]
-        comb=next((c for c in self.project.get('combinations',[]) if c['id']==case_id),None)
-        if comb:return merge_forces(comb['factors'],raw)
+        cases = {case['id']: case for case in self.project.get('load_cases', [])}
+        patterns = {pattern['id']: pattern for pattern in load_patterns(self.project)}
+        cache = {}
+
+        def nodal_forces(case):
+            return resolve_case_loads(self.model, case, patterns, preview=True, cache=cache)[0]
+
+        source = cases.get(case_id) or patterns.get(case_id)
+        if source is not None:
+            if source['kind'] == 'nodal' and not source.get('loads'):
+                return {}
+            return nodal_forces(source)
+        combination = next((entry for entry in self.project.get('combinations', [])
+                            if entry['id'] == case_id), None)
+        if combination and combination['factors']:
+            factors = combination['factors']
+            raw = {key: nodal_forces(cases[key]) for key in factors if key in cases}
+            return merge_forces(factors, raw)
         return {}

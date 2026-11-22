@@ -11,7 +11,7 @@ import sys
 from .catalog import load_catalog
 from .engine import run_project
 from .model import make_model, geometry_diagnostics
-from .loads import build_case_loads
+from .loads import load_patterns, resolve_case_loads
 from .search import suggest_geometry
 from .design import suggest_sections
 from .migrate import migrate_v05
@@ -91,10 +91,11 @@ def run_server(base:Path, open_browser:bool=True)->ThreadingHTTPServer:
                     loads={}
                     audit=None
                     if selected is not None:
-                        cases=project.get('load_cases',[])
-                        source=next((c for c in cases if c.get('id')==selected),None)
+                        patterns = {pattern['id']: pattern for pattern in load_patterns(project)}
+                        cases = {case['id']: case for case in project.get('load_cases', [])}
+                        source = cases.get(selected) or patterns.get(selected)
                         if source is None:raise ValueError('Caso de prévia inexistente')
-                        raw,audit=build_case_loads(model,source)
+                        raw,audit=resolve_case_loads(model,source,patterns)
                         loads={nid:{'fx_n':v[0],'fy_n':v[1]} for nid,v in raw.items()}
                     return self.respond({'preview_only':True,'model':model.to_dict(),
                                          'loads':loads,'load_audit':audit,

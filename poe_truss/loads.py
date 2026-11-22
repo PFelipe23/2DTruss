@@ -1,8 +1,9 @@
 """Conversão auditável de ações em forças nodais equivalentes (N, mm).
 
 Hipóteses: treliça ideal articulada. Distribuição de uma carga uniforme
-por trecho em metades nodais preserva força e momento resultantes, mas NÃO
-reproduz a flexão local da barra nem a rigidez da terça.
+por trecho em metades nodais preserva força e momento resultantes.
+A flexão local opcional usa a solução de uma barra biapoiada sob carga
+uniforme e não acrescenta rigidez de pórtico ao modelo.
 """
 from __future__ import annotations
 from math import hypot, isfinite
@@ -34,6 +35,7 @@ def build_case_loads(model: Model, case: dict) -> tuple[dict[str,tuple[float,flo
     nodes=model.node_map()
     totals={key:[0.,0.] for key in nodes}
     entries=[]
+    transverse = {}
     kind=case.get('kind')
     cid=str(case.get('id','SEM_ID'))
 
@@ -66,8 +68,9 @@ def build_case_loads(model: Model, case: dict) -> tuple[dict[str,tuple[float,flo
             fy=force_n(action.get('fy',0),unit)
             add(str(action['node']),fx,fy,'nodal',f'load_{index+1}',
                 {'input_fx':action.get('fx',0),'input_fy':action.get('fy',0),'input_unit':unit})
-    elif kind in ('surface','line'):
-        if model.shape=='explicit':
+    elif kind in ('surface', 'line', 'member_line'):
+        targeted = kind == 'member_line'
+        if model.shape == 'explicit' and not (targeted or model.chord_loads):
             raise ValueError('Modelo explícito: distribuídas exigem associação de segmentos; use cargas nodais')
         intensity=float(case.get('value',0))
         if not isfinite(intensity) or intensity<0:raise ValueError(f'Caso {cid}: intensidade inválida')
@@ -81,10 +84,21 @@ def build_case_loads(model: Model, case: dict) -> tuple[dict[str,tuple[float,flo
         if zone not in VALID_ZONES:raise ValueError(f'Caso {cid}: zona inválida')
         if application not in ('top','bottom'):raise ValueError(f'Caso {cid}: aplicação inválida')
         if basis not in ('projected','roof_surface'):raise ValueError(f'Caso {cid}: base de comprimento inválida')
+        mode = case.get('member_mode', 'nodal')
+        if targeted and mode not in ('nodal', 'flexure'):
+            raise ValueError(f'Caso {cid}: tratamento da carga de barra inválido')
+        selected = set(case.get('member_ids', [])) if targeted else set()
+        if targeted and selected - {member.id for member in model.members}:
+            raise ValueError(f'Caso {cid}: barra de aplicação inexistente')
+        if targeted and intensity and not selected:
+            raise ValueError(f'Caso {cid}: selecione barras para a carga linear')
         left=min(n.x for n in model.nodes)
         center=(left+max(n.x for n in model.nodes))/2
         for m in model.members:
-            if m.group!=('superior' if application=='top' else 'inferior'):
+            if targeted:
+                if m.id not in selected:
+                    continue
+            elif m.group != ('superior' if application == 'top' else 'inferior'):
                 continue
             a,b=nodes[m.i],nodes[m.j]
             dx,dy=b.x-a.x,b.y-a.y
@@ -97,6 +111,9 @@ def build_case_loads(model: Model, case: dict) -> tuple[dict[str,tuple[float,flo
             tributary_width=model.frame_spacing_mm if kind=='surface' else 1.
             resultant=q*reference_length*tributary_width
             ux,uy=_direction(direction,dx,dy)
+            if targeted and mode == 'flexure':
+                # Positivo no eixo local +y, 90° anti-horário a partir de i → j.
+                transverse[m.id] = resultant * (-dy * ux + dx * uy) / actual
             meta={'member_id':m.id,'kind':kind,'input_value':intensity,
                   'input_force_unit':unit,'basis':basis,'direction':direction,'zone':zone,
                   'actual_length_mm':actual,'projected_length_mm':projected,
@@ -125,6 +142,8 @@ def build_case_loads(model: Model, case: dict) -> tuple[dict[str,tuple[float,flo
            'sum_fx_n':vfx,'sum_fy_n':vfy,'sum_m_origin_nmm':vm,
            'residual':residual,'status':'CONSISTENTE_ALGEBRICAMENTE',
            'scope':'Conservação da transformação nodal; não valida modelo físico nem coeficientes normativos'}
+    if transverse:
+        audit['member_transverse_n'] = transverse
     return loads,audit
 
 
@@ -144,6 +163,70 @@ def merge_forces(factors:dict[str,float],loads:dict[str,dict[str,tuple[float,flo
             combined[node][0]+=factor*xy[0]
             combined[node][1]+=factor*xy[1]
     return {k:tuple(v) for k,v in combined.items()}
+
+
+def load_patterns(project):
+    """Padrões explícitos e carregamentos legados que também são casos."""
+    return [*project.get('load_patterns', []),
+            *(case for case in project.get('load_cases', []) if case.get('kind') != 'static')]
+
+
+def resolve_case_loads(model, case, patterns, *, preview=False, cache=None):
+    """Aplica padrões ao caso estático linear antes da análise."""
+    if case['kind'] != 'static':
+        if preview and case['kind'] == 'nodal' and not case.get('loads'):
+            return {node.id: (0., 0.) for node in model.nodes}, {}
+        return build_case_loads(model, case)
+    factors = case.get('patterns', {})
+    if not factors:
+        raise ValueError(f'Caso {case["id"]}: informe ao menos um padrão')
+    cache = {} if cache is None else cache
+    for key in factors:
+        if key not in patterns or patterns[key].get('kind') == 'static':
+            raise ValueError(f'Caso {case["id"]}: padrão inexistente {key}')
+        if key not in cache:
+            cache[key] = resolve_case_loads(model, patterns[key], patterns, preview=preview)
+    raw = {key: cache[key][0] for key in factors}
+    forces = merge_forces(factors, raw)
+    entries = []
+    for key, factor in factors.items():
+        for parcel in cache[key][1].get('entries', []):
+            entry = dict(parcel, case_id=case['id'], pattern_id=key, factor=float(factor))
+            for field in ('fx_n', 'fy_n', 'moment_origin_nmm'):
+                entry[field] *= float(factor)
+            entries.append(entry)
+    audit = {
+        'case_id': case['id'], 'kind': 'static', 'patterns': dict(factors),
+        'entries': entries, 'n_entries': len(entries),
+        'sum_fx_n': sum(fx for fx, _ in forces.values()),
+        'sum_fy_n': sum(fy for _, fy in forces.values()),
+        'sum_m_origin_nmm': sum(row['moment_origin_nmm'] for row in entries),
+    }
+    transverse = combine_member_transverse(factors, {key: cache[key][1] for key in factors})
+    if transverse:
+        audit['member_transverse_n'] = transverse
+    return forces, audit
+
+
+def combine_member_transverse(factors, audits):
+    """Superpõe resultantes transversais na convenção local de cada barra."""
+    combined = {}
+    for identifier, factor in factors.items():
+        for member, value in audits[identifier].get('member_transverse_n', {}).items():
+            combined[member] = combined.get(member, 0.) + float(factor) * value
+    return combined
+
+
+def member_flexure(model, transverse):
+    """Resultados locais de carga uniforme em barra biapoiada (N, N·mm)."""
+    return {
+        member.id: {
+            'shear_i_n': -transverse[member.id] / 2,
+            'shear_j_n': transverse[member.id] / 2,
+            'moment_mid_nmm': -transverse[member.id] * model.member_length(member) / 8,
+        }
+        for member in model.members if member.id in transverse
+    }
 
 
 def combination_audit(combo_id:str,factors:dict[str,float],raw:dict[str,dict[str,tuple[float,float]]]):

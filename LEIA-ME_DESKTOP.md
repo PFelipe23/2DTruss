@@ -1,35 +1,62 @@
 # 2DTruss v0.1 — Desktop PySide6
 
-**Aplicação nativa sem navegador**: `2DTruss.pyw` abre `QMainWindow` / `QGraphicsView`, com ribbon e painéis de navegação. O solver de treliça plana permanece em `poe_truss/solver.py`.
+**Aplicação nativa sem navegador**. `2DTruss.pyw` abre a área de trabalho com barra de ícones e painéis de navegação. O solver de treliça plana permanece em `poe_truss/solver.py`.
 
 ## Execução no Windows, sem privilégios administrativos
 
 1. Ter **Python 3.10+** instalado no perfil do usuário (com `py -3` disponível).
 2. Executar **`INSTALAR_DEPENDENCIAS_USUARIO.bat`** uma vez: instala PySide6 e ezdxf no perfil do usuário, sem elevar privilégios. A instalação requer acesso ao repositório de pacotes e pode ser bloqueada por políticas corporativas.
 3. Executar **`INICIAR_DESKTOP.bat`**. Não inicia servidor HTTP ou navegador.
-4. O opcional `BUILD_EXE_WINDOWS.bat` permite criar um diretório executável com PyInstaller, desde que esse empacotador esteja instalado no usuário. **O ZIP não inclui executável autossuficiente testado no Windows.**
+4. Use o procedimento abaixo para gerar um diretório executável com PyInstaller.
 
 Em Linux com dependências instaladas: `python3 2DTruss.pyw`.
 
+## Gerar o executável Windows
+
+Na raiz do repositório, use Python 3.12 de 64 bits em um ambiente virtual. Um Prompt de Comando comum é suficiente.
+
+```bat
+py -3.12 -m venv .venv
+call .venv\Scripts\activate.bat
+python -m pip install -r requirements-build.txt
+call BUILD_EXE_WINDOWS.bat
+```
+
+Extraia ou copie a pasta inteira `dist\2DTruss_v0.1` e abra `2DTruss_v0.1.exe`. A pasta `_internal` contém Python, Qt, o catálogo e os exemplos incluídos. O aplicativo empacotado roda sem instalação separada de Python. Extraia em uma pasta gravável para que as preferências sejam salvas em `2DTruss.ini`, junto ao executável. O projeto do manual fica em `_internal\examples\manual_pratt_16m.json`. A importação DWG continua dependendo do conversor ODA local.
+
+Para verificar o pacote pelo Prompt de Comando, execute `start /wait "" "dist\2DTruss_v0.1\2DTruss_v0.1.exe" --smoke-test`. O código de saída 0 confirma a abertura do aplicativo, o cálculo do exemplo, a vista 3D, a importação do DXF de teste, a leitura e gravação JSON, o assistente de cobertura e a limpeza da análise ao iniciar outro projeto.
+
+Para uma compilação isolada, defina `TRUSS_BUILD_DIR` e `TRUSS_DIST_DIR` como diretórios de trabalho e saída. O GitHub Actions disponibiliza a pasta portátil completa como artefato após o teste do executável.
+
+## Assistente de cobertura
+
+Em **Novo**, escolha abrir o assistente ou começar com um projeto em branco. O ícone **Assistente de cobertura**, ao lado de **Novo**, também pode ser usado a partir de um projeto aberto.
+
+1. Escolha as unidades de comprimento e força do assistente. Informe o vão, o espaçamento entre treliças, o modelo, a faixa de alturas e o passo máximo real entre terças. A prévia 2D acompanha os campos. Para cobertura inclinada, o desnível é proporcional ao vão a partir do modelo de origem.
+2. Confira as cargas de estudo. O peso próprio das barras é automático. Os valores iniciais por área são 6,0 kgf/m² de telha, 6,0 de terças, 1,0 de estabilizadores, 10,0 de utilidades e 25,0 de sobrecarga. A comparação de flechas usa fatores unitários. Os esforços do estudo ponderado usam 1,25 para permanentes e 1,50 para sobrecarga.
+3. Clique em uma alternativa para examinar a geometria e os perfis na prévia. A busca compara perfis simples nas famílias do modelo de origem e prefere a menor massa que atende ao limite de flecha entre os perfis avaliados. Essa busca preliminar não verifica resistência.
+4. Se habilitar o travamento, indique 2 ou 3 módulos entre treliças, bitola das diagonais redondas, área das demais barras e força por nó interno. Em duas águas são estudadas quatro faixas espelhadas, uma por lado em cada banzo. O modelo idealizado usa quatro apoios de canto e aplica a força nos dois sentidos, internamente em uma borda. Os cordões e as diagonais são unilaterais à tração, com esforço zero quando frouxos. Apenas os montantes admitem compressão.
+5. Clique em **Gerar projeto**. Os padrões, casos e combinações principais começam vazios. Para consultar os planos, salve a cobertura e abra **Mais comandos → Planos de travamento**.
+
 ## Interface e atalhos
 
-- Ribbon: Arquivo, Modelagem, Ações, Análise e Exibição, incluindo comando Vista 3D.
-- Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), caixa de seleção, zoom pela roda, ferramenta pan, ajuste da vista, escala vertical exclusivamente visual.
-- **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade de 50 mm. A posição só é aplicada ao modelo após soltar o mouse.
+- Barra única de ícones para arquivo, modelagem, cargas, exibição, unidades e cálculo. Passe o mouse por 500 ms para identificar um comando. **Mais comandos** abre importação, exportação e outras ferramentas.
+- Viewport 2D QGraphicsScene: seleção por clique, seleção múltipla (Ctrl), janela por contenção ou cruzamento, filtro no rodapé, zoom pela roda e pan ao segurar o botão central.
+- **Mover**: seleciona e arrasta um nó, com snap por extremidade, ponto médio ou grade configurável (50 mm por padrão). A posição só é aplicada ao modelo após soltar o mouse.
 - **Novo nó**: clique cria um *rascunho* de nó; ele passa ao modelo estrutural quando uma barra válida o conecta à malha existente. Isso impede nós isolados no solver.
 - **Criar barra**: clique primeiro nó e depois segundo nó; o grupo da barra segue o combo da aba Propriedades.
-- **Subdividir**: clique uma barra; cria nó intermediário e duas barras, preservando o comprimento e a área. A barra original deixa de existir e novos IDs são emitidos sem reciclagem.
+- **Dividir barra ao meio**: clique uma barra; cria nó no ponto médio e duas barras, preservando o comprimento e a área. A barra original deixa de existir e novos IDs são emitidos sem reciclagem.
 - **Excluir**: barra ou nó selecionado, com remoção das barras incidentes e cargas nodais órfãs. Se o resultado não for um modelo geométrico válido, a edição é recusada.
 - Propriedades: edição X/Y, suporte UX/UY, grupo e perfil por grupo.
-- Cargas: nova carga nodal, tabela por caso, Fx/Fy em kgf/tf/kN/N. A aba **Ações gerais** agora permite editar casos de carga de área, linha, peso próprio e vento com intensidade, direção, zona e base de comprimento; o motor distribui as resultantes aos nós. Os valores de pressão e coeficientes são sempre fornecidos pelo projetista.
-- Resultados: esforços por caso/combinação, modos de envoltória (tração e compressão), pesquisa de dez barras críticas, exportação CSV DimPerfil e memorial HTML A3.
+- Cargas nodais em kgf, tf, kN ou N. Padrões distribuídos usam intensidade, direção, zona e base de comprimento para obter as resultantes nodais.
+- Resultados: esforços axiais e deslocamentos nodais por caso ou combinação, modos de envoltória de tração e compressão, pesquisa de dez barras críticas, exportação CSV DimPerfil e memorial HTML A3.
 - `F5` calcula. `Ctrl+S`, `Ctrl+O`, `Ctrl+Z`, `Ctrl+Y` e `Delete` disponibilizam comandos convencionais.
 
 Todas as edições estruturais invalidam os resultados anteriores. Não há um solver no viewport.
 
 ## Importação DXF / DWG
 
-**Arquivo > Importar DXF/DWG**:
+Abra **Mais comandos → Importar DXF/DWG**.
 
 1. Escolha arquivo; se DXF não tiver `$INSUNITS`, informe a unidade manualmente (mm, cm, m ou polegada).
 2. Informe tolerância de união dos nós (valor inicial 1 mm).
@@ -49,47 +76,89 @@ Todas as edições estruturais invalidam os resultados anteriores. Não há um s
 - `desktop/editing.py` — comandos imutáveis para edição topológica, geometria e IDs.
 - `desktop/cad_io.py` — leitura controlada de CAD e aprovação para modelo explícito.
 - `desktop/qt/viewport.py` — QGraphicsView e eventos do desenho.
-- `desktop/qt/app.py` — ribbon, painéis de propriedades, cargas e resultados.
+- `desktop/qt/app.py` — barra de ícones, painéis de propriedades, cargas e resultados.
 - `desktop/app.py` — interface Tkinter legado preservada apenas para compatibilidade e comparação histórica; **não é o launcher atual**.
 - `tests/test_cad_editing_pyside.py` — testes automáticos CAD/edição, sem ambiente gráfico.
 
 O esquema persistente continua **`poe-truss-python/v1`**. Um campo opcional `model_override` registra a malha explícita pós-edição/importação; `cad_drafts` guarda nós provisórios. IDs de nó/barra estáveis são preservados quando possível. Alterações de topologia limpam resistências externas potencialmente vencidas e exigem reconfirmação dos travamentos.
 
+`load_patterns` guarda novos padrões independentes. Cada caso explícito em `load_cases` usa `kind: "static"` e um mapa `patterns` de fatores por padrão. Os carregamentos de arquivos anteriores continuam funcionando como padrões com um caso implícito de fator 1. `combinations` mantém o mapa `factors` por caso.
+
 ## Limitações e evidências
 
-- Esta entrega implementa fonte PySide6. **Não pôde ser executada em Qt neste ambiente**, porque PySide6 não estava instalado e a instalação de pacotes externos foi impedida por ausência de acesso à rede.
+- O roteiro manual de interface nas resoluções-alvo permanece na [documentação de revisão 3D](docs/REDESENHO_UI_E_PERFIS_3D_V09.md).
 - O núcleo Python, a importação DXF com arquivos reais gerados para teste, a leitura/escrita JSON e o cálculo estrutural pós-importação foram testados.
-- DWG com ODA real e executável Windows não foram testados nesta infraestrutura.
+- A importação DWG com o conversor ODA exige teste em uma instalação do conversor.
 - Sem verificação normativa completa NBR 14762, NBR 8800, estabilidade global fora do plano ou aprovação ELU. O uso continua exploratório/experimental.
 
 ## Fluxo de projeto integrado na interface nativa
 
 A aba **Perfis** altera os perfis por grupo, a quantidade de componentes, a modulação e permite registrar fabricante/modelo e massa superficial de telhas informados pelo usuário. O caso `G2` é atualizado como carga superficial de telha, com convenção `1 kgf = 10 N`. O passo das terças é hipótese geométrica, não capacidade resistente comprovada.
 
-A aba **Combinações** permite criar, excluir e editar fatores assinados por caso; não calcula coeficientes normativos automaticamente. A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções, sem impedir valores manuais fora da pesquisa. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
+A aba **Estabilidade** registra K no plano/fora do plano, eixo, orientação e comprimentos destravados declarados. A aba **Alternativas** pesquisa em segundo plano e mostra até três soluções. **Diagnóstico** localiza problemas e sinaliza as pendências normativas.
 
-## Vista 3D — seções extrudadas (revisão acumulativa v0.1)
+### Definir, aplicar e conferir cargas
 
-**Exibição > Vista 3D** abre uma janela não modal. O programa lê as dimensões U, UE e L disponíveis no catálogo e extruda o **contorno da seção aberta** no eixo da barra, com orientação e arranjos simples/duplos configuráveis. Não usa mais os prismas cheios genéricos da versão anterior.
+Os três ícones de definição de cargas abrem janelas flutuantes. O desenho continua disponível ao editar um carregamento.
 
-- Arraste **esquerdo**: girar; roda: zoom; **clique direito** sobre uma peça: informações da barra. O visor traz modos sólido/aramado e escala de seção **1×–8×** (padrão 3×), exclusivamente gráfica; OBJ é exportado em escala real 1×.
-- Presets isométrica, frontal XY, perfil lateral e superior; cor por grupo, família ou sinal da força axial.
-- Aba **Arranjo**: componentes simples/duplos, costas a costas / frente a frente / mesma orientação, rotação e distância entre centroides (mm).
-- Aba **Arranjo** traz prévia ampliada da seção efetivamente desenhada.
-- O botão **Aplicar ao projeto** atualiza o JSON, recalcula a geometria do modelo 2D e invalida resultados anteriores.
-- O botão **Exportar malha OBJ** gera malhas fechadas em mm para conferir em visualizadores externos.
-- Perfis duplos sem distanciamento explicitado apresentam um aviso; a separação de 6 mm nesse caso é **puramente gráfica**.
-- Os perfis laminados com dimensões incompletas usam geometrias **idealizadas** e avisos. Sem raios de concordância ou espessura diferenciada de mesa. Se a área desenhada divergir significativamente da área utilizada no solver, um aviso identifica a discrepância.
+1. Em **Tipos de Carregamentos**, cadastre os padrões e sua natureza. A interface apresenta referências à ABNT NBR 6120 para ações em edificações, à ABNT NBR 6123 para vento e à ABNT NBR 8681 para ações excepcionais.
+2. Em **Casos de Carregamentos**, crie um caso estático linear e indique os padrões aplicados e seus fatores.
+3. Em **Combinações**, selecione a classificação ELU ou ELS e informe os fatores assinados dos casos. As intensidades, os coeficientes e o enquadramento normativo são definidos pelo projetista.
 
-A visualização continua **geométrica**, não uma análise 3D ou verificação normativa. A versão atual renderiza faces por ordenação de profundidade sem z-buffer; interseções visuais complexas não estão homologadas para análise de interferências.
+Em **Inserir cargas nodais**, escolha ou crie um padrão nodal. Clique num nó no desenho ou escolha seu ID no inspetor. Informe `Fx`, `Fy` e a unidade. `Fx` positivo aponta para a direita e `Fy` positivo para cima. Para repetir a força, selecione vários nós com Ctrl+clique e use **Aplicar a n nós selecionados**. Clique numa parcela da tabela para editar ou remover a linha. **Nova** encerra a edição da linha e reaproveita os valores do formulário.
 
-A aplicação principal foi reorganizada com navegador filtrável, painel de tarefas fixo, ribbon agrupado e tabela de esforços abaixo do viewport. Veja `docs/REDESENHO_UI_E_PERFIS_3D_V09.md`.
+Selecione um padrão, caso ou combinação e ligue **Cargas** para conferir suas resultantes nodais antes de calcular. A cauda fica junto ao nó nas cargas ascendentes, e a ponta fica junto ao nó nas descendentes. Nas cargas puramente horizontais, o critério usa o sinal de `Fx`. O comprimento da seta é relativo à maior força exibida. A faixa mostra a soma de `Fx` e `Fy` na unidade de exibição. Os valores e fatores de carregamento são exibidos com duas casas decimais. **Valores** coloca os rótulos em caixas com fundo opaco. Passe o cursor sobre a seta ou o nó para ver as componentes.
+
+### Unidades de exibição
+
+O ícone de régua junto ao botão **Calcular** seleciona força, comprimento, tensão e casas decimais. A convenção nominal do modelo utiliza `1 kgf = 10 N`. A configuração de tensão em MPa ou força por comprimento ao quadrado fica disponível no seletor.
+
+As preferências são gravadas localmente. O seletor atualiza o desenho, as propriedades e os resultados calculados sem alterar o projeto. Os formulários de carga conservam a unidade que identifica cada entrada, e os formatos de arquivo mantêm suas unidades documentadas.
+
+## Área de trabalho
+
+À esquerda, **Propriedades** resume o objeto selecionado. **Modelo** filtra nós e barras por ID ou grupo e **Tarefas** abre as ferramentas do editor. À direita, as abas apresentam controles de coordenadas e apoios para nós, cargas nodais para seleção em nós e edição de grupo e perfil para barras. O botão de painel no canto superior direito do desenho recolhe ou expande o editor.
+
+O botão **2D | 3D** fica no canto superior esquerdo do desenho. Ao lado do seletor de carregamento fica o botão do painel direito. A barra inferior mostra as coordenadas e o estado da análise. Grade, snap e identificadores de nós têm controles independentes. O menu de identificadores das barras permite escolher banzos superior e inferior, montantes e diagonais. A vista 2D reposiciona as caixas de texto após mudar o zoom.
+
+`F5` calcula e abre o painel inferior. Arraste os divisores para redimensionar os painéis. Use **Só desenho** ou `Ctrl+0` para recolher e restaurar os painéis. `Esc` volta à seleção.
+
+### Resultados 2D
+
+- **Esforços axiais** alterna entre **Caso ativo**, **Envoltória geral** e **Envoltória ELU**. A última usa as combinações classificadas como ELU. Na envoltória, o desenho mostra os picos globais e as barras selecionadas em fonte 10. A tabela lista todas as barras. O vermelho na linha superior indica tração e o azul na inferior indica compressão. Clique na caixa para consultar as combinações governantes.
+- **Deformações** sobrepõe a deformada tracejada à geometria original. Selecione uma combinação ELS ou **ELS · Maior |Uy|** para ver a deformada da combinação que produz o maior deslocamento vertical em valor absoluto. Os marcadores âmbar identificam os picos ascendente e descendente de `Uy` e o maior deslocamento resultante. Clique no nó original ou deformado para abrir uma caixa com `Ux`, `Uy` e `|u|`. A amplificação gráfica é independente dos valores reais na tabela e nas caixas.
+
+O seletor de carregamento atualiza o caso ativo e a deformada. Clique numa linha para localizar a barra ou o nó no desenho. Os indicadores das caixas de seleção usam fundo claro mesmo sob o tema escuro do sistema.
+
+### Travamento fora do plano
+
+Selecione um nó conectado, marque **Travado fora do plano** no editor à direita, informe a referência e aplique. O desenho marca o nó em roxo. O travamento é independente das restrições `UX` e `UY`. Dois nós confirmados no mesmo banzo contínuo permitem obter o comprimento lateral ao longo do trecho entre eles. O comprimento explícito por barra ou grupo tem precedência. O comprimento torsional continua sendo um dado separado.
+
+Após editar a geometria, revise as marcas âmbar no editor. O cadastro representa as condições declaradas de contenção e fornece contexto à verificação da barra e ao reaproveitamento de resistências manuais.
+
+### Resistências manuais
+
+Abra **Mais comandos → Resistências manuais por grupo**. A tabela lista perfil, solicitação governante ELU, comprimento-limite e resistência fornecida pelo projetista. Os limites de tração e compressão são cadastrados separadamente. Informe a referência técnica junto com as condições de ligação e travamento e confirme a equivalência das barras agrupadas.
+
+O limite abrange barras de comprimento igual ou inferior no mesmo escopo, com perfil, material, arranjo e condições cadastradas compatíveis. Na compressão, a ausência de comprimentos de travamento declarados, de eixos ou de referência mantém a barra em escopo individual. Os dados são salvos no JSON para consulta e reaproveitamento, com origem e comprimento-limite. O cadastro é independente das triagens calculadas pelo motor.
+
+[Dossiê de flambagem fora do plano e fluxo CUFSM com conferência manual no DimPerfil](docs/FLAMBAGEM_FORA_DO_PLANO.md)
+
+## Perfis, aço e vista 3D
+
+Em **Perfis e aço**, escolha o grupo, a biblioteca e a bitola. A seleção é aplicada ao grupo com quantidade **1**. Aumente a quantidade após escolher a bitola para criar uma seção dupla. Projetos abertos mantêm os perfis e as quantidades gravados.
+
+Em **2D | 3D**, clique nas faces do cubo para alinhar a vista. Os botões sob o cubo retornam à isométrica ou abrem a lista de seis vistas ortogonais. Clique numa barra para consultar suas propriedades e editar seu grupo em **Arranjo**. Arraste com o botão esquerdo para girar, use o botão central para deslocar e a roda para aproximar. A troca de bitola, a geometria confirmada no inspetor e os ajustes de arranjo atualizam a vista aberta. Use `F5` para recalcular depois de modificar o projeto.
+
+Em **Exibição** no painel 3D, ajuste cor, modo sólido ou aramado e escala de seção. **Exportar OBJ** gera malhas em milímetros e escala real, independentemente do exagero visual. Seções duplas com espaçamento nulo têm uma separação gráfica de 6 mm. O visor ordena faces por profundidade para inspeção visual. Use o OBJ em um visualizador adequado para examinar interseções.
+
+O seletor **Aço do projeto** aplica propriedades ao material uniforme do modelo. Consulte a [procedência dos perfis e aços](docs/PERFIS_E_ACOS.md) para escolher a biblioteca e conferir as propriedades de referência.
 
 ## Limites ainda presentes
 
 - Ambiente de validação sem runtime PySide6: compilação sintática e testes do núcleo concluídos, **sem homologação gráfica real em Windows**.
-- Sem instalador Windows autossuficiente assinado; para executar é necessário Python 3.10+, PySide6 e ezdxf instalados no perfil do usuário, ou gerar futuramente `.exe` via PyInstaller.
+- O procedimento de build gera um pacote portátil sem assinatura digital.
 - Perfis duplos permanecem dependentes de hipóteses de solidarização; resistência por NBR 14762 ainda não implementada.
 - Intercâmbio DWG requer ODA File Converter externo.
-- Edição CAD com modelo explícito não suporta distribuição superficial automática: ações de área/linha ficam bloqueadas até implementação de associação de superfícies/tramos no CAD.
+- Edição CAD com modelo explícito não suporta distribuição superficial automática: ações por banzo dependem da geometria gerada. Cargas lineares diretamente nas barras selecionadas estão disponíveis.
 - Reações/esforços ainda precisam de validação cruzada real no FTool.

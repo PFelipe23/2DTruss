@@ -77,6 +77,7 @@ junit.xml
 *~
 
 # Configuracoes da maquina e IDE
+/2DTruss.ini
 .vscode/
 .idea/
 *.code-workspace

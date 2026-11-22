@@ -10,7 +10,7 @@ No Windows:
 2. Execute `INSTALAR_DEPENDENCIAS_USUARIO.bat` (PySide6 e ezdxf, sem admin; requer rede e permissão da política de TI).
 3. Execute `INICIAR_DESKTOP.bat` ou `INICIAR.bat`.
 
-A migração conserva o contrato JSON e o motor de cálculo `poe_truss/solver.py`. Para os testes, execute `python -m unittest discover -s tests -p 'test_*.py'`.
+A migração conserva o contrato JSON e o motor de cálculo `poe_truss/solver.py`. Para os testes, instale `requirements-test.txt` e execute `python -m pytest -q -rs tests`.
 
 O componente antigo Tkinter (`desktop/app.py`) e a interface web legada permanecem como referências de migração, não como launchers padrão. Nenhuma licença de software CAD proprietário acompanha o pacote.
 

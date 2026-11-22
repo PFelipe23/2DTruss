@@ -1,6 +1,6 @@
 # 2DTruss — v0.1
 
-**2DTruss** é um aplicativo desktop em Python/PySide6 para concepção e análise linear de **treliças planas**, com editor de nós e barras, visualização de carregamentos e resultados, importação DXF, inspeção geométrica 3D de perfis U/UE/L e emissão de relatórios.
+**2DTruss** é um aplicativo desktop em Python/PySide6 para concepção e análise linear de **treliças planas**, com editor de nós e barras, visualização de carregamentos e resultados, importação DXF, inspeção geométrica 3D de perfis U, Ue, L, W, H e HP e emissão de relatórios.
 
 > **Estado: experimental.** A análise 2D ainda depende de validação cruzada efetiva no FTool. O pré-dimensionamento e a triagem de Euler/escoamento bruto **não são dimensionamento resistente normativo**. A janela PySide6 não está homologada em Windows; a importação DWG depende do ODA Converter; a inspeção 3D não é análise espacial e as seções podem ser idealizadas.
 
@@ -13,15 +13,18 @@ py -3 -m pip install --user -r requirements-desktop.txt
 py -3 2DTruss.pyw
 ```
 
-No Windows, também pode executar `INSTALAR_DEPENDENCIAS_USUARIO.bat` e `INICIAR_DESKTOP.bat`. O projeto não fornece um executável Windows autossuficiente homologado.
+No Windows, também pode executar `INSTALAR_DEPENDENCIAS_USUARIO.bat` e `INICIAR_DESKTOP.bat`. Para gerar o executável portátil com PyInstaller, siga o [guia desktop](LEIA-ME_DESKTOP.md#gerar-o-executável-windows).
+
+O [manual do usuário](docs/MANUAL_DO_USUARIO.md) acompanha uma treliça Pratt de 16 m da preparação do modelo à leitura da envoltória ELU e da deformada ELS.
 
 ## Testes
 
 ```bash
-python -m unittest discover -s tests -p 'test_*.py'
+python -m pip install -r requirements-test.txt
+python -m pytest -q -rs tests
 ```
 
-O CI executa os testes de regressão sem dependência de UI gráfica real. Testes ignorados devem ser tratados como pendências, não como aprovação. Executar os casos no FTool para a validação externa independente.
+O CI executa a regressão em Linux com Qt offscreen e verifica a inicialização do pacote gerado no Windows. A inspeção gráfica nas resoluções-alvo e a comparação independente dos casos no FTool têm roteiros próprios.
 
 ## Organização
 
@@ -48,4 +51,4 @@ A identificação pública é **2DTruss v0.1**, com uma casa decimal. Tag Git: `
 
 ## Licença e direitos
 
-A licença ainda não foi definida. **MIT é a recomendação, mas não foi concedida formalmente.** O repositório deverá permanecer **privado** até a decisão do titular e revisão de catálogos, bibliotecas e eventuais materiais de terceiros. Consulte [`docs/LICENCIAMENTO.md`](docs/LICENCIAMENTO.md). Não incluir normas ABNT nem cópias da apostila do Olídio.
+O código do 2DTruss é distribuído sob a [licença MIT](LICENSE). A [documentação de licenciamento](docs/LICENCIAMENTO.md) registra a procedência de dados e as licenças das dependências usadas no pacote Windows.

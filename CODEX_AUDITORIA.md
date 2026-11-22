@@ -10,7 +10,7 @@ O produto atual é **desktop PySide6** (`2DTruss.pyw`) sem navegador, com solver
 
 ## Auditoria obrigatória
 
-- Executar `python -m unittest discover -s tests -p 'test_*.py'`.
+- Instalar `requirements-test.txt` e executar `python -m pytest -q -rs tests`.
 - Comparar SHA256 `poe_truss/solver.py` com a edição Tk desktop anterior. Não alterá-lo nesta evolução.
 - Inspecionar `desktop/editing.py` para integridade de IDs, nós provisórios, subdivisão, remoção e invalidação de capacidades externas.
 - Inspecionar `desktop/cad_io.py` e verificar INSUNITS, tolerância, entidades suportadas, extensão DWG com ODA, importação segura de origem e grupos.

@@ -1,0 +1,42 @@
+# Flambagem fora do plano em treliças planas
+
+## O que cada método responde
+
+O 2DTruss calcula a força axial e os deslocamentos no plano de uma treliça articulada. Para verificar a compressão fora do plano de um membro, é necessário conhecer o eixo da seção, o comprimento destravado, a condição de extremidade e a contenção fora do plano. Quando o modo depende do movimento conjunto dos banzos, das treliças vizinhas ou do sistema de contraventamento, a análise precisa representar esses componentes e os graus de liberdade espaciais.
+
+| Resultado | Entradas determinantes | Como usar |
+|---|---|---|
+| Carga crítica elástica de uma barra | Rigidez à flexão no eixo examinado e comprimento efetivo. Para o caso ideal de Euler, a carga varia com o inverso do quadrado desse comprimento. | Comparar hipóteses de travamento e validar o modelo de barra equivalente. |
+| Autovalor e forma de flambagem de um sistema | Estado de esforços do carregamento de referência, rigidez elástica e geométrica, vínculos e elementos capazes de representar o modo. | Identificar onde o modo se desenvolve e qual escala do carregamento produz a bifurcação elástica. |
+| Resistência de cálculo | Família do perfil, aço, propriedades relevantes, modos aplicáveis, hipóteses de ligação e regras da edição normativa adotada. | Verificar a solicitação de cálculo com rastreio do caso e do modo governantes. |
+
+Um elemento axial espacial pode representar o movimento dos nós do conjunto e a redistribuição geométrica. A curvatura interna de uma barra requer um elemento com rigidez à flexão e discretização adequada. Para perfis de parede fina, os modos local e distorcional requerem a representação das paredes ou um método de seção apropriado. O autovalor elástico e a forma modal registram a bifurcação de um modelo idealizado. A avaliação da resistência exige tratar separadamente as hipóteses de imperfeição, inelasticidade e critérios do projeto. [Referência de análise da CSI](https://docs.csiamerica.com/manuals/sap2000/CSiRefer.pdf) · [Guia de flambagem do Code_Aster](https://docaster-en-codeaster-doc-4113bb35b8213385c636b94f1536856d7f617.gitlab.io/manuals/man_u/u2/u2.08.04/index.html) · [Método das faixas finitas do CUFSM](https://www.ce.jhu.edu/cufsm/about/)
+
+## Programas comerciais e ferramentas abertas
+
+| Programa | Abordagem documentada | Aplicação à treliça |
+|---|---|---|
+| SAP2000 | O caso **Buckling** calcula fatores e modos para um conjunto de carregamentos. O módulo de verificação de aço oferece parâmetros de comprimento destravado e fator de comprimento efetivo por barra. [Caso de flambagem](https://docs.csiamerica.com/help-files/sap/Menus/Define/Load_Cases/Load_Case_Data_Form.htm) · [Parâmetros de aço](https://docs.csiamerica.com/help-files/sap/Menus/Design/Steel_Frame_Design/SF_Interactive_Steel_Frame_Design.htm) | Comparar a verificação de barra equivalente com os modos de um modelo espacial que inclua os travamentos. A análise modal usa um carregamento de referência por vez. |
+| RFEM / RSTAB | O RFEM 6 aceita comprimentos efetivos definidos por apoios e fatores ou importados de uma análise de estabilidade. O manual do RFEM 5 distingue explicitamente o elemento axial **Truss (only N)** do tipo **Buckling**, que usa um limite elástico de compressão. [Comprimentos efetivos no RFEM 6](https://www.dlubal.com/en/support-and-learning/support/knowledge-base/001727) · [Tipos de barra no RFEM 5](https://www.dlubal.com/en/downloads-and-information/documents/online-manuals/rfem-5/004217) | Registrar apoios e eixos por trecho e ligar o comprimento importado ao modo relevante. Verificar os tipos de elemento da versão usada na comparação. |
+| OpenSees | Disponibiliza elementos de treliça corrotacionais e famílias próprias de vigas-colunas, com transformações geométricas como P-Delta. [Treliça corrotacional](https://opensees.github.io/OpenSeesDocumentation/user/manual/model/elements/CorotationalTruss.html) · [Transformação P-Delta](https://opensees.github.io/OpenSeesDocumentation/user/manual/model/geomTransf/PDelta.html) | Referência aberta para análises espaciais, estudos de sensibilidade à imperfeição e resposta incremental. Usar vigas-colunas nas barras cuja curvatura se quer representar. |
+| Code_Aster | O operador `CALC_MODES` com `MODE_FLAMB` resolve o problema de flambagem elástica. O guia separa essa abordagem da análise não linear incremental com `STAT_NON_LINE`. [Operador modal](https://code-aster.org/doc/default/en/man_u/u4/u4.52.02.pdf) · [Guia de flambagem](https://docaster-en-codeaster-doc-4113bb35b8213385c636b94f1536856d7f617.gitlab.io/manuals/man_u/u2/u2.08.04/index.html) | Referência aberta para reproduzir os autovalores e o formato dos modos com vínculos e rigidez geométrica explicitamente controlados. |
+| CUFSM | Utiliza faixas finitas e identifica componentes elásticas locais, distorcionais e globais em membros de parede fina. [Documentação do CUFSM](https://www.ce.jhu.edu/cufsm/about/) | Complementar os testes de perfis U e Ue mediante cargas críticas e formas da seção. A estabilidade do conjunto de treliças requer um modelo do sistema. |
+| Ftool | Analisa estruturas planas. O roteiro da PUC-Rio inclui um exemplo específico de treliça. [Roteiro de treliça do Ftool](https://www.tecgraf.puc-rio.br/ftp_pub/lfm/civ1111-081-trabtrelica-roteiro.pdf) | Conferir primeiro esforços axiais, reações e deslocamentos no plano do 2DTruss. Usar outra referência para os modos espaciais. |
+
+## Fluxo adotado para o 2DTruss
+
+1. **Rastrear os esforços e as restrições.** Guardar separadamente as combinações de ELU e ELS e o identificador do carregamento governante. Para cada barra comprimida, registrar a orientação da seção, os comprimentos destravados, os fatores efetivos, os pontos de travamento e a origem das hipóteses. Uma terça só entra como contenção mediante definição verificável da restrição e do caminho de forças. Repetir a inspeção dos banzos sob gravidade e sucção, pois o banzo comprimido pode mudar.
+2. **Verificar primeiro a barra equivalente.** Comparar uma barra biarticulada em dois eixos com Euler e conferir a sensibilidade a um travamento intermediário ideal. Usar esse benchmark para rigidez e comprimento efetivo. Para perfis abertos, a flexo-torção pode exigir torção, empenamento, centro de cisalhamento e demais propriedades do modelo escolhido. L, seções duplas, ligações entre componentes e travamentos sem rigidez documentada merecem estados explícitos de pendência.
+3. **Estudar o perfil no CUFSM.** Reproduzir a seção e as condições de extremidade, guardar a curva de assinatura, as formas modais e as cargas críticas elásticas. Distinguir os modos local, distorcional e global e registrar os comprimentos examinados. A estabilidade espacial do conjunto fica como verificação separada quando depender do movimento relativo de treliças e banzos. [Documentação do CUFSM](https://www.ce.jhu.edu/cufsm/about/)
+4. **Conferir manualmente no DimPerfil.** Reproduzir perfil, aço, solicitação de ELU, eixos, comprimentos e condições de ligação e travamento nas opções compatíveis com o perfil e a versão instalada. Guardar o memorial de saída e comparar o modo governante e a resistência. Lançar a resistência conferida na tabela manual do 2DTruss com a referência e o comprimento-limite. Os resultados críticos elásticos do CUFSM antecedem a conferência resistente. [Manual do CBCA para formados a frio](https://www.jodi.com.br/wp-content/uploads/2021/01/Manual-CBCA-Estrutura-composta-por-perfis-formados-a-frio.pdf)
+
+## Critérios de aceite dos modelos de referência
+
+| Modelo | Conferência principal |
+|---|---|
+| Barra biarticulada com duas inércias distintas | Carga crítica analítica e direção do primeiro modo. Comparar refinamento e comprimento efetivo sem trocar eixos. |
+| Duas treliças ligadas por contenções laterais | Comparar o modo com e sem contenções e com rigidez finita. Registrar quais nós e graus de liberdade estão restritos. |
+| Cobertura com gravidade e sucção | Comparar qual banzo comprime, os trechos destravados e os modos de cada carregamento de referência. |
+| Perfil Ue de parede fina | Conferir as formas local e distorcional e a sensibilidade à discretização da seção e às condições de extremidade. |
+
+Para cada comparação, guardar o arquivo de entrada, a versão do programa, as condições de apoio, as unidades e a tolerância definida antes do ensaio. O cadastro de resistências manuais serve para rastrear valores fornecidos pelo projetista enquanto as verificações resistentes são desenvolvidas.

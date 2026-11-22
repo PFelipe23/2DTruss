@@ -4,6 +4,8 @@ Convenção: N > 0 tração; N < 0 compressão.
 Restrições por nó e grau de liberdade, sem assumir localização dos apoios.
 """
 from __future__ import annotations
+from dataclasses import replace
+from itertools import combinations
 from math import hypot, isfinite
 from .model import Model
 
@@ -50,6 +52,9 @@ class LU:
 class LinearTruss:
     def __init__(self,model:Model, E_mpa:float):
         self.model=model
+        self.ties = tuple(m.id for m in model.members if m.tension_only)
+        if len(self.ties) > 12:
+            raise ValueError('A análise unilateral aceita até 12 barras somente à tração por plano.')
         self.E=float(E_mpa)
         if not isfinite(self.E) or self.E<=0:raise ValueError('Módulo de elasticidade inválido')
         self.ids=[n.id for n in model.nodes]
@@ -82,7 +87,54 @@ class LinearTruss:
         self.lu=LU(kr)
         self.pivot_ratio=max(self.lu.pivot_sizes)/min(self.lu.pivot_sizes)
 
-    def analyze(self,loadmap:dict[str,tuple[float,float]])->dict:
+    def analyze(self, loadmap: dict[str, tuple[float, float]]) -> dict:
+        result = self._analyze(loadmap)
+        if not self.ties:
+            return result
+        tolerance = 1e-6
+        negative = frozenset(key for key in self.ties if result['axial_n'][key] < -tolerance)
+        if not negative:
+            for key in self.ties:
+                result['axial_n'][key] = max(0., result['axial_n'][key])
+            return result
+
+        lookup = {member.id: member for member in self.model.members}
+        active_sets = (frozenset(inactive) for count in range(1, len(self.ties) + 1)
+                       for inactive in combinations(self.ties, count))
+
+        def attempt(inactive):
+            members = [replace(m, tension_only=False) for m in self.model.members if m.id not in inactive]
+            try:
+                trial = LinearTruss(replace(self.model, members=members), self.E)._analyze(loadmap)
+            except StabilityError:
+                return None
+            axial = trial['axial_n']
+            active = set(self.ties) - inactive
+            if any(axial[key] < -tolerance for key in active):
+                return None
+            displacements = trial['nodal_displacements']
+            for key in inactive:
+                member = lookup[key]
+                i, j = self.node_map[member.i], self.node_map[member.j]
+                ui, uj = displacements[i.id], displacements[j.id]
+                dx, dy = j.x - i.x, j.y - i.y
+                extension = dx * (uj['ux_mm'] - ui['ux_mm']) + dy * (uj['uy_mm'] - ui['uy_mm'])
+                elastic_force = self.E * member.area * extension / (dx * dx + dy * dy)
+                if elastic_force > tolerance:
+                    return None
+            axial.update({key: max(0., axial[key]) for key in active})
+            axial.update(dict.fromkeys(inactive, 0.))
+            return trial
+
+        result = attempt(negative)
+        if result is not None:
+            return result
+        for inactive in active_sets:
+            if inactive != negative and (result := attempt(inactive)) is not None:
+                return result
+        raise StabilityError('O plano com barras somente à tração não tem solução estável para esta ação.')
+
+    def _analyze(self,loadmap:dict[str,tuple[float,float]])->dict:
         n=len(self.ids)
         F=[0.]*(2*n)
         for name,(fx,fy) in loadmap.items():
